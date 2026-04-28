@@ -6,7 +6,7 @@ import * as api from '../services/api';
 import toast from 'react-hot-toast';
 
 declare global {
-  interface Window { Razorpay: any; }
+  interface Window { Razorpay: any; Cashfree: any; }
 }
 
 type Step = 'address' | 'review' | 'payment' | 'success';
@@ -33,25 +33,101 @@ export default function CheckoutPage() {
   const shippingCost = cartTotal >= 50000 ? 0 : 5000;
   const total = cartTotal + shippingCost;
 
-  // Step 1: Validate address and go to review
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addr.name || !addr.line1 || !addr.city || !addr.state || !addr.pincode || !addr.phone) {
-      toast.error('Please fill all required fields');
-      return;
+      toast.error('Please fill all required fields'); return;
     }
-    if (addr.phone.length !== 10) {
-      toast.error('Please enter a valid 10-digit phone number');
-      return;
-    }
-    if (addr.pincode.length !== 6) {
-      toast.error('Please enter a valid 6-digit pincode');
-      return;
-    }
+    if (addr.phone.length !== 10) { toast.error('Please enter a valid 10-digit phone number'); return; }
+    if (addr.pincode.length !== 6) { toast.error('Please enter a valid 6-digit pincode'); return; }
     setStep('review');
   };
 
-  // Step 2: Create order, then initiate Razorpay payment
+  // ========== RAZORPAY PAYMENT ==========
+  const openRazorpay = (payData: any, oid: string, onum: string) => {
+    setStep('payment');
+    const options = {
+      key: payData.razorpay_key_id,
+      amount: payData.amount,
+      currency: payData.currency || 'INR',
+      name: 'ElectroMart',
+      description: `Order #${onum}`,
+      order_id: payData.razorpay_order_id,
+      prefill: { name: addr.name, contact: addr.phone },
+      theme: { color: '#4F46E5' },
+      handler: async (response: any) => {
+        try {
+          await api.verifyPayment({
+            gateway: 'razorpay',
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          toast.success('🎉 Payment successful! Order confirmed.');
+          setCart([], 0);
+          setStep('success');
+        } catch {
+          toast.error('Payment verification failed. Please contact support.');
+          setStep('review');
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          toast.error('Payment cancelled. Order saved — pay later from Orders.');
+          setCart([], 0);
+          setStep('success');
+        },
+      },
+    };
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  };
+
+  // ========== CASHFREE PAYMENT ==========
+  const openCashfree = async (payData: any, oid: string, onum: string) => {
+    setStep('payment');
+    try {
+      const cashfree = await window.Cashfree({
+        mode: payData.cashfree_env === 'production' ? 'production' : 'sandbox',
+      });
+      const result = await cashfree.checkout({
+        paymentSessionId: payData.payment_session_id,
+        redirectTarget: '_modal',
+      });
+
+      // After modal closes, verify payment
+      if (result.error) {
+        toast.error('Payment failed: ' + (result.error.message || 'Unknown error'));
+        setStep('review');
+        return;
+      }
+      if (result.paymentDetails) {
+        // Verify with backend
+        try {
+          await api.verifyPayment({
+            gateway: 'cashfree',
+            order_id: oid,
+          });
+          toast.success('🎉 Payment successful! Order confirmed.');
+          setCart([], 0);
+          setStep('success');
+        } catch {
+          toast.error('Payment verification failed.');
+          setStep('review');
+        }
+      } else {
+        // User closed modal
+        toast.error('Payment cancelled. Order saved — pay later from Orders.');
+        setCart([], 0);
+        setStep('success');
+      }
+    } catch (err: any) {
+      toast.error('Cashfree checkout error: ' + (err.message || 'Unknown'));
+      setStep('review');
+    }
+  };
+
+  // ========== PLACE ORDER & PAY ==========
   const handlePlaceAndPay = async () => {
     setLoading(true);
     try {
@@ -63,59 +139,22 @@ export default function CheckoutPage() {
       setOrderId(oid);
       setOrderNumber(onum);
 
-      // 2. Create Payment (get Razorpay order)
+      // 2. Create Payment
       const payRes = await api.createPayment(oid);
       const payData = payRes.data;
+      const gateway = payData.gateway;
 
-      // 3. Check if Razorpay key exists — if not, skip payment (dev mode)
-      if (!payData.razorpay_key_id) {
-        toast.success('🎉 Order placed! (Payment skipped — no Razorpay key configured)');
+      // 3. Route to correct gateway
+      if (gateway === 'razorpay' && payData.razorpay_key_id) {
+        openRazorpay(payData, oid, onum);
+      } else if (gateway === 'cashfree' && payData.payment_session_id) {
+        openCashfree(payData, oid, onum);
+      } else {
+        // Mock / no gateway configured
+        toast.success('🎉 Order placed! (Payment skipped — no gateway configured)');
         setCart([], 0);
         setStep('success');
-        return;
       }
-
-      // 4. Open Razorpay Checkout
-      setStep('payment');
-      const options = {
-        key: payData.razorpay_key_id,
-        amount: payData.amount,
-        currency: payData.currency || 'INR',
-        name: 'ElectroMart',
-        description: `Order #${onum}`,
-        order_id: payData.razorpay_order_id,
-        prefill: {
-          name: addr.name,
-          contact: addr.phone,
-        },
-        theme: { color: '#4F46E5' },
-        handler: async (response: any) => {
-          // 5. Verify payment
-          try {
-            await api.verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            toast.success('🎉 Payment successful! Order confirmed.');
-            setCart([], 0);
-            setStep('success');
-          } catch {
-            toast.error('Payment verification failed. Please contact support.');
-            setStep('review');
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            toast.error('Payment was cancelled. Your order is saved — you can pay later from Orders.');
-            setCart([], 0);
-            setStep('success'); // Order is created, just unpaid
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.open();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to place order');
       setStep('review');
@@ -163,7 +202,7 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      {/* ============ SUCCESS STEP ============ */}
+      {/* SUCCESS */}
       {step === 'success' && (
         <div className="max-w-lg mx-auto text-center py-16">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -179,12 +218,11 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      {/* ============ ADDRESS & REVIEW STEPS ============ */}
+      {/* ADDRESS / REVIEW / PAYMENT */}
       {(step === 'address' || step === 'review' || step === 'payment') && (
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Column */}
           <div className="lg:col-span-2">
-            {/* ADDRESS STEP */}
+            {/* ADDRESS */}
             {step === 'address' && (
               <form onSubmit={handleAddressSubmit} className="card p-6">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-6">
@@ -239,10 +277,9 @@ export default function CheckoutPage() {
               </form>
             )}
 
-            {/* REVIEW STEP */}
+            {/* REVIEW */}
             {(step === 'review' || step === 'payment') && (
               <div className="space-y-4">
-                {/* Shipping Address Summary */}
                 <div className="card p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -262,7 +299,6 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Cart Items */}
                 <div className="card p-5">
                   <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
                     <Package className="w-4 h-4 text-primary-600" /> Order Items ({cart.length})
@@ -289,23 +325,13 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Pay Now Button */}
                 {step === 'review' && (
-                  <button
-                    onClick={handlePlaceAndPay}
-                    disabled={loading}
-                    className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-base"
-                  >
+                  <button onClick={handlePlaceAndPay} disabled={loading}
+                    className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-base">
                     {loading ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Creating order & opening payment...
-                      </>
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Creating order & opening payment...</>
                     ) : (
-                      <>
-                        <CreditCard className="w-5 h-5" />
-                        Pay ₹{(total / 100).toLocaleString('en-IN')} with Razorpay
-                      </>
+                      <><CreditCard className="w-5 h-5" /> Pay ₹{(total / 100).toLocaleString('en-IN')}</>
                     )}
                   </button>
                 )}
@@ -313,7 +339,7 @@ export default function CheckoutPage() {
                 {step === 'payment' && (
                   <div className="card p-8 text-center">
                     <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-3" />
-                    <p className="text-gray-600 font-medium">Razorpay payment window is open...</p>
+                    <p className="text-gray-600 font-medium">Payment window is open...</p>
                     <p className="text-sm text-gray-400 mt-1">Complete the payment in the popup</p>
                   </div>
                 )}
@@ -325,8 +351,6 @@ export default function CheckoutPage() {
           <div className="lg:col-span-1">
             <div className="card p-5 sticky top-20 space-y-4">
               <h3 className="font-bold text-lg text-gray-900">Order Summary</h3>
-
-              {/* Cart Items Preview (compact) */}
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {cart.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between text-sm">
@@ -335,7 +359,6 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
-
               <div className="border-t border-gray-100 pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
@@ -348,20 +371,17 @@ export default function CheckoutPage() {
                   </span>
                 </div>
               </div>
-
               <div className="border-t border-gray-200 pt-3">
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span className="text-primary-600">₹{(total / 100).toLocaleString('en-IN')}</span>
                 </div>
               </div>
-
-              {/* Trust */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {[
                   { icon: Shield, label: 'Secure Checkout' },
                   { icon: Truck, label: 'Fast Delivery' },
-                  { icon: CreditCard, label: 'Razorpay Secure' },
+                  { icon: CreditCard, label: 'Secure Payment' },
                   { icon: CheckCircle, label: '100% Genuine' },
                 ].map((b) => (
                   <div key={b.label} className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
