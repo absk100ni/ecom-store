@@ -1,113 +1,47 @@
-# 🛍️ ElectroMart — E-Commerce Storefront
+# 🛍️ LucubraElec — Storefront
 
-A modern, responsive e-commerce storefront built with React + TypeScript + Tailwind CSS. Features a rich homepage with promo banners, category grid, featured products, trust badges, and a complete shopping flow with Razorpay payment integration.
+React + TypeScript + Tailwind storefront for [LucubraElec.in](https://lucubraelec.in) — electronics & components. Google login for accounts, **guest checkout for social-media (reel) traffic**, Razorpay payments with partial-COD, canonical shareable product URLs.
 
 ## 🚀 Quick Start
 
 ```bash
-cd ecom-store
 npm install
 npm run dev
 ```
 
-Frontend starts on **http://localhost:5173** (needs backend on port 8080)
+Starts on **http://localhost:3000** (needs backend on :8080).
 
-## ✅ What's Done
+## ✅ Feature Status
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| Homepage | ✅ Complete | Hero banner, announcement bar, category grid, featured products, deal of the day, trust badges |
-| Product Listing | ✅ Complete | Grid/list view, sidebar filters (category, price, rating), sort options |
-| Product Detail | ✅ Complete | Image gallery, variants, add to cart, related products, star rating |
-| Shopping Cart | ✅ Complete | Add/remove/update quantity, cart total, proceed to checkout |
-| Checkout Flow | ✅ Complete | 3-step: Address → Review → Razorpay Payment → Success |
-| Razorpay Integration | ✅ Complete | Opens Razorpay popup, signature verification, dev-mode fallback |
-| OTP Login | ✅ Complete | Phone number + OTP, JWT token storage |
-| My Orders | ✅ Complete | Order history, status tracking |
-| Header/Footer | ✅ Complete | Search bar, cart icon with count, category nav, mobile responsive |
-| Mobile Bottom Nav | ✅ Complete | Home, categories, cart, profile tabs for mobile |
-| Responsive Design | ✅ Complete | Mobile-first, works on all screen sizes |
-| Zustand Store | ✅ Complete | Global state for auth, cart, UI |
+| Homepage | ✅ | Hero, category grid, featured, deal of the day |
+| Product listing | ✅ | Grid/list, category sidebar (slug-based filters), sort, search autocomplete |
+| Product detail | ✅ | Gallery, variants, serviceability check, share button (canonical URL) |
+| Canonical URLs | ✅ | `/p/{slug}` everywhere; legacy `/products/{id}` canonicalizes via history.replaceState |
+| Cart | ✅ | Stock-capped steppers ("Max stock (N)"), coupon field, guest localStorage cart |
+| Guest checkout | ✅ | No login needed: address → whole-rupee advance/COD split → Razorpay; cart merges into account on later login |
+| Checkout | ✅ | All-or-nothing: modal dismiss/failure abandons order (stock+coupon released) and returns to checkout with cart intact; honest Payment Pending screen |
+| Order tracking | ✅ | `/track` (public): order number + phone → status timeline; account users get Orders page + retry-payment button |
+| Auth | ✅ | Google OAuth (accounts); guest flow avoids webview OAuth block for Instagram/FB/YouTube traffic |
+| Wishlist / Reviews / Profile | ✅ | Full pages wired to backend |
+| Mobile | ✅ | Responsive + bottom nav (Home / Products / Cart / Profile) |
 
-## ❌ What's Left To Do
+## ❌ Left for launch
 
-### 🔴 Must Have (Before Production)
-- [ ] **Razorpay Key** — Set `RAZORPAY_KEY_ID` in backend env so payment popup opens (currently skips payment in dev mode)
-- [ ] **Backend URL** — Update `VITE_API_URL` if backend is not on localhost:8080
-- [ ] **Product Images** — Replace placeholder images with real product photos
-- [ ] **Error Boundaries** — Add React error boundaries for graceful crash handling
-
-### 🟡 Should Have (Enhancement)
-- [ ] **Wishlist Page** — UI for viewing/managing wishlisted products (API exists in backend)
-- [ ] **User Profile Page** — View/edit profile, saved addresses, change phone
-- [ ] **Product Reviews UI** — Submit reviews, display star ratings from other users
-- [ ] **Coupon Code Input** — Add coupon input field in cart/checkout (backend supports it)
-- [ ] **Search with Autocomplete** — Debounced search with dropdown suggestions
-- [ ] **Category Pages** — Dedicated pages for each category with SEO-friendly URLs
-- [ ] **Order Tracking Page** — Visual tracking timeline (placed → shipped → delivered)
-- [ ] **Image Zoom** — Pinch-to-zoom on product images
-- [ ] **Skeleton Loading** — Replace loading spinners with skeleton screens
-- [ ] **Toast Notifications** — Improve toast styles and positioning
-
-### 🔵 Nice To Have (Future)
-- [ ] **PWA Support** — Service worker, offline mode, install prompt
-- [ ] **Push Notifications** — FCM integration for order updates
-- [ ] **Dark Mode** — Theme toggle with system preference detection
-- [ ] **Product Comparison** — Side-by-side product comparison
-- [ ] **Recently Viewed** — Track and display recently viewed products
-- [ ] **Share Product** — WhatsApp/social share buttons
-- [ ] **SEO** — React Helmet for meta tags, Open Graph
-- [ ] **Analytics** — Google Analytics / Mixpanel integration
-- [ ] **Internationalization (i18n)** — Multi-language support
-- [ ] **A/B Testing** — Feature flags for homepage layouts
-- [ ] **Performance** — Lazy loading images, code splitting, bundle optimization
-
-## 🏗 Architecture
-
-```
-ecom-store/
-├── index.html                          # Razorpay script loaded here
-├── src/
-│   ├── App.tsx                         # Router + Layout
-│   ├── main.tsx                        # Entry point
-│   ├── index.css                       # Tailwind + custom styles
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── Header.tsx              # Top nav, search, cart
-│   │   │   ├── Footer.tsx              # Site footer
-│   │   │   ├── AnnouncementBar.tsx     # Top promo strip
-│   │   │   └── MobileBottomNav.tsx     # Mobile tab bar
-│   │   ├── home/
-│   │   │   ├── HeroBanner.tsx          # Hero carousel
-│   │   │   ├── CategoryGrid.tsx        # Category cards
-│   │   │   ├── FeaturedProducts.tsx    # Featured section
-│   │   │   ├── PromoBanners.tsx        # Promo cards
-│   │   │   ├── DealOfTheDay.tsx        # Countdown deal
-│   │   │   └── TrustBadges.tsx         # Trust indicators
-│   │   └── ui/
-│   │       ├── ProductCard.tsx         # Reusable product card
-│   │       ├── StarRating.tsx          # Star rating display
-│   │       └── CountdownTimer.tsx      # Deal countdown
-│   ├── pages/
-│   │   ├── HomePage.tsx                # Landing page
-│   │   ├── ProductsPage.tsx            # Listing + filters
-│   │   ├── ProductDetailPage.tsx       # Product detail
-│   │   ├── CartPage.tsx                # Shopping cart
-│   │   ├── CheckoutPage.tsx            # 3-step checkout + Razorpay
-│   │   ├── OrdersPage.tsx              # Order history
-│   │   └── LoginPage.tsx               # OTP login
-│   ├── services/api.ts                 # Axios API client
-│   └── store/useStore.ts              # Zustand global state
-├── tailwind.config.js
-├── vite.config.ts
-└── package.json
-```
+- [ ] Deploy to Vercel + `VITE_*` prod env vars (API URL, store URL, Google client ID)
+- [ ] OG-meta edge function for rich link previews (reel links show generic preview until then)
+- [ ] Real product catalog + photos (via admin panel)
 
 ## ⚙️ Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| VITE_API_URL | http://localhost:8080/api/v1 | Backend API base URL |
+| Variable | Description |
+|----------|-------------|
+| VITE_API_URL | Backend API base (default http://localhost:8080/api/v1) |
+| VITE_STORE_NAME | Brand name (LucubraElec) |
+| VITE_GOOGLE_CLIENT_ID | Google OAuth client |
+| VITE_INSTAGRAM_URL / VITE_YOUTUBE_URL / VITE_FACEBOOK_URL | Social links (footer + follow cards) |
+| VITE_ENABLE_PHONE_LOGIN | Phone-OTP login UI (hidden unless `true`) |
 
 ## 📄 License
 MIT
