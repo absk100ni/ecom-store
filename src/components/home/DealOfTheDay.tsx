@@ -73,7 +73,7 @@ export default function DealOfTheDay() {
               const discount = p.compare_at_price > 0 ? Math.round((1 - p.price / p.compare_at_price) * 100) : 15;
               return (
                 <div key={p.id} className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden group hover:bg-white/10 transition-all">
-                  <Link to={`/products/${p.id}`}>
+                  <Link to={`/p/${p.slug || p.id}`}>
                     <div className="aspect-[4/3] bg-white/5 flex items-center justify-center overflow-hidden relative">
                       {p.thumbnail ? (
                         <img src={p.thumbnail} alt={p.name} className="w-full h-full object-cover product-image-zoom" />
@@ -87,7 +87,7 @@ export default function DealOfTheDay() {
                   </Link>
                   <div className="p-4">
                     <p className="text-xs text-primary-400 font-medium mb-1">{p.category}</p>
-                    <Link to={`/products/${p.id}`}>
+                    <Link to={`/p/${p.slug || p.id}`}>
                       <h3 className="text-white font-semibold mb-2 line-clamp-1 hover:text-primary-400 transition-colors">{p.name}</h3>
                     </Link>
                     <div className="flex items-center gap-2 mb-3">

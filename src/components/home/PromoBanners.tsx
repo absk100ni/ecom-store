@@ -36,7 +36,7 @@ export default function PromoBanners() {
         {categories.map((cat: any, i: number) => (
           <Link
             key={cat.slug || cat.name}
-            to={`/products?category=${encodeURIComponent(cat.name)}`}
+            to={`/products?category=${encodeURIComponent(cat.slug || cat.name)}`}
             className={`bg-gradient-to-br ${gradients[i % gradients.length]} rounded-2xl p-6 text-white group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden`}
           >
             {/* Background decoration */}

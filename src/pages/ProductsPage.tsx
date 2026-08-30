@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Search, SlidersHorizontal, Grid3X3, List, ChevronDown, X, ChevronRight, Home } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
 import * as api from '../services/api';
 import ProductCard from '../components/ui/ProductCard';
+import CategoryTreeSidebar from '../components/ui/CategoryTreeSidebar';
 
 const SORT_OPTIONS = [
   { value: '', label: 'Relevance' },
@@ -36,6 +38,9 @@ export default function ProductsPage() {
 
   const search = searchParams.get('search') || '';
   const category = searchParams.get('category') || '';
+  // URL param carries the slug (matches backend product.category); resolve to display name for UI
+  const categoryLabel =
+    categories.find((c) => (c.slug || c.name) === category)?.name || category;
   const limit = 6;
 
   useEffect(() => {
@@ -110,6 +115,7 @@ export default function ProductsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      <Helmet><title>Products - LucubraElec</title><meta name="description" content="Browse electronics, smartphones, laptops and more" /></Helmet>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <Link to="/" className="hover:text-primary-600 flex items-center gap-1">
@@ -120,7 +126,7 @@ export default function ProductsPage() {
         {category && (
           <>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-gray-900 font-medium">{category}</span>
+            <span className="text-gray-900 font-medium">{categoryLabel}</span>
           </>
         )}
       </nav>
@@ -132,27 +138,11 @@ export default function ProductsPage() {
             {/* Categories */}
             <div className="card p-5">
               <h3 className="font-semibold text-gray-900 mb-3 text-sm">Categories</h3>
-              <div className="space-y-1">
-                <button
-                  onClick={() => setCategory('')}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                    !category ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  All Products
-                </button>
-                {categories.map((c: any) => (
-                  <button
-                    key={c.slug || c.name}
-                    onClick={() => setCategory(c.name)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                      category === c.name ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
+              <CategoryTreeSidebar
+                selectedCategory={category}
+                onSelectCategory={setCategory}
+                flatCategories={categories}
+              />
             </div>
 
             {/* Price Range */}
@@ -191,7 +181,7 @@ export default function ProductsPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                {category || 'All Products'}
+                {categoryLabel || 'All Products'}
               </h1>
               <p className="text-sm text-gray-500 mt-0.5">
                 {total} products {search && `matching "${search}"`}
@@ -254,7 +244,7 @@ export default function ProductsPage() {
             <div className="flex flex-wrap items-center gap-2 mb-4">
               {category && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg text-xs font-medium">
-                  {category}
+                  {categoryLabel}
                   <button onClick={() => setCategory('')} className="hover:bg-primary-100 rounded-full p-0.5">
                     <X className="w-3 h-3" />
                   </button>
@@ -394,23 +384,11 @@ export default function ProductsPage() {
               {/* Categories */}
               <div>
                 <h4 className="font-semibold text-gray-900 mb-3 text-sm">Categories</h4>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => { setCategory(''); setSidebarOpen(false); }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${!category ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600'}`}
-                  >
-                    All Products
-                  </button>
-                  {categories.map((c: any) => (
-                    <button
-                      key={c.slug || c.name}
-                      onClick={() => { setCategory(c.name); setSidebarOpen(false); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm ${category === c.name ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600'}`}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
+                <CategoryTreeSidebar
+                  selectedCategory={category}
+                  onSelectCategory={(c) => { setCategory(c); setSidebarOpen(false); }}
+                  flatCategories={categories}
+                />
               </div>
 
               {/* Price Range */}

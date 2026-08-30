@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Package, ShoppingCart, Eye } from 'lucide-react';
+import { Package, ShoppingCart, Eye, Heart } from 'lucide-react';
 import StarRating from './StarRating';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
@@ -34,20 +34,26 @@ export default function ProductCard({ product: p, view = 'grid' }: ProductCardPr
   const handleQuickAdd = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isAuth) { navigate('/login'); return; }
+    if (!isAuth) {
+      // Guest: add to local cart
+      const ok = useStore.getState().addToGuestCart({ product_id: p.id, name: p.name, price: p.price, image: p.thumbnail, stock: p.stock });
+      if (!ok) { toast.error(`Only ${p.stock} available in stock`); return; }
+      toast.success('Added to cart!');
+      return;
+    }
     try {
       await api.addToCart(p.id, 1);
       toast.success('Added to cart!');
       const c = await api.getCart();
       useStore.getState().setCart(c.data.cart?.items || [], c.data.total || 0);
-    } catch {
-      toast.error('Failed to add');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to add');
     }
   };
 
   if (view === 'list') {
     return (
-      <Link to={`/products/${p.id}`} className="card hover:shadow-lg transition-all group flex">
+      <Link to={`/p/${p.slug || p.id}`} className="card hover:shadow-lg transition-all group flex">
         <div className="w-48 h-48 bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden relative">
           {p.thumbnail ? (
             <img src={p.thumbnail} alt={p.name} className="w-full h-full object-cover product-image-zoom" />
@@ -88,7 +94,7 @@ export default function ProductCard({ product: p, view = 'grid' }: ProductCardPr
   }
 
   return (
-    <Link to={`/products/${p.id}`} className="card-hover group relative">
+    <Link to={`/p/${p.slug || p.id}`} className="card-hover group relative">
       {/* Image */}
       <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden relative">
         {p.thumbnail ? (
@@ -117,10 +123,14 @@ export default function ProductCard({ product: p, view = 'grid' }: ProductCardPr
               <ShoppingCart className="w-3.5 h-3.5" /> Quick Add
             </button>
             <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              className="bg-white text-gray-900 p-2 rounded-lg shadow-lg hover:bg-gray-100 transition-all"
+              onClick={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                if (!isAuth) { toast('Login to save to wishlist', { icon: '💡' }); return; }
+                api.addToWishlist(p.id).then(() => toast.success('Added to wishlist!')).catch(() => toast.error('Failed'));
+              }}
+              className="bg-white text-gray-900 p-2 rounded-lg shadow-lg hover:bg-red-50 hover:text-red-500 transition-all"
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Heart className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

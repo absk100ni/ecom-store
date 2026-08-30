@@ -4,13 +4,14 @@ import { useStore } from '../../store/useStore';
 
 export default function MobileBottomNav() {
   const location = useLocation();
-  const { cartCount, isAuth } = useStore();
+  const { isAuth } = useStore();
+  const cartBadge = useStore((s) => s.isAuth ? s.cartCount : s.guestCartCount);
   const path = location.pathname;
 
   const navItems = [
     { label: 'Home', icon: Home, to: '/', active: path === '/' },
-    { label: 'Categories', icon: Grid3X3, to: '/products', active: path === '/products' },
-    { label: 'Cart', icon: ShoppingCart, to: '/cart', active: path === '/cart', badge: cartCount },
+    { label: 'Products', icon: Grid3X3, to: '/products', active: path === '/products' },
+    { label: 'Cart', icon: ShoppingCart, to: '/cart', active: path === '/cart', badge: cartBadge },
     { label: 'Account', icon: User, to: isAuth ? '/orders' : '/login', active: path === '/orders' || path === '/login' },
   ];
 

@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Package, Minus, Plus, Trash2, Tag, ArrowRight, ShoppingBag, ChevronRight, Home, Truck, Shield } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
 import { useStore } from '../store/useStore';
 import * as api from '../services/api';
 import toast from 'react-hot-toast';
+import { STORE_NAME, getShippingCost, FREE_SHIPPING_THRESHOLD } from '../config/constants';
 
 export default function CartPage() {
-  const { cart, cartTotal, isAuth, setCart } = useStore();
+  const { cart, cartTotal, isAuth, setCart, guestCart, guestCartTotal, updateGuestCartQty, removeFromGuestCart } = useStore();
   const navigate = useNavigate();
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Active cart: server when authed, local when guest
+  const activeCart = isAuth ? cart : guestCart;
+  const activeTotal = isAuth ? cartTotal : guestCartTotal;
 
   useEffect(() => {
     if (isAuth) {
@@ -23,6 +29,10 @@ export default function CartPage() {
 
   const updateQty = async (productId: string, newQty: number) => {
     if (newQty < 1) return;
+    if (!isAuth) {
+      updateGuestCartQty(productId, newQty);
+      return;
+    }
     setUpdatingId(productId);
     try {
       await api.updateCartQty(productId, newQty);
@@ -36,6 +46,11 @@ export default function CartPage() {
   };
 
   const removeItem = async (productId: string) => {
+    if (!isAuth) {
+      removeFromGuestCart(productId);
+      toast.success('Item removed');
+      return;
+    }
     try {
       await api.removeFromCart(productId);
       const c = await api.getCart();
@@ -46,23 +61,18 @@ export default function CartPage() {
     }
   };
 
-  const applyCoupon = () => {
+  const applyCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
-    if (code === 'WELCOME10') {
-      const disc = Math.round(cartTotal * 0.1);
-      setDiscount(disc);
+    if (!code) return;
+    try {
+      const res = await api.applyCoupon(code, activeTotal);
+      setDiscount(res.data.discount || 0);
       setCouponApplied(true);
-      toast.success('Coupon WELCOME10 applied! 10% off');
-    } else if (code === 'FLAT500') {
-      if (cartTotal >= 200000) { // min ₹2000
-        setDiscount(50000); // ₹500
-        setCouponApplied(true);
-        toast.success('Coupon FLAT500 applied! ₹500 off');
-      } else {
-        toast.error('Minimum order ₹2,000 required for FLAT500');
-      }
-    } else {
-      toast.error('Invalid coupon code');
+      toast.success(`Coupon ${code} applied! You save ₹${((res.data.discount || 0) / 100).toLocaleString('en-IN')}`);
+    } catch (err: any) {
+      setCouponApplied(false);
+      setDiscount(0);
+      toast.error(err.response?.data?.error || 'Invalid coupon code');
     }
   };
 
@@ -73,22 +83,12 @@ export default function CartPage() {
     toast.success('Coupon removed');
   };
 
-  if (!isAuth) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-20 text-center">
-        <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Login to view your cart</h2>
-        <p className="text-gray-500 mb-6">Please login to add items and view your shopping cart</p>
-        <Link to="/login" className="btn-primary">Login Now</Link>
-      </div>
-    );
-  }
-
-  const shipping = cartTotal >= 99900 ? 0 : 4900; // Free above ₹999, else ₹49
-  const finalTotal = cartTotal - discount + shipping;
+  const shipping = getShippingCost(activeTotal);
+  const finalTotal = activeTotal - discount + shipping;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      <Helmet><title>Cart - {STORE_NAME}</title><meta name="description" content="Review your shopping cart" /></Helmet>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link to="/" className="hover:text-primary-600 flex items-center gap-1">
@@ -99,10 +99,10 @@ export default function CartPage() {
       </nav>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
-        Shopping Cart {cart.length > 0 && <span className="text-gray-400 font-normal text-lg">({cart.length} items)</span>}
+        Shopping Cart {activeCart.length > 0 && <span className="text-gray-400 font-normal text-lg">({activeCart.length} items)</span>}
       </h1>
 
-      {cart.length === 0 ? (
+      {activeCart.length === 0 ? (
         <div className="text-center py-20">
           <ShoppingBag className="w-20 h-20 text-gray-200 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
@@ -115,11 +115,17 @@ export default function CartPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-3">
-            {cart.map((item) => (
+            {!isAuth && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700 flex items-center gap-2 mb-2">
+                <Shield className="w-4 h-4 shrink-0" />
+                <span>You're shopping as a guest. <Link to="/login" className="font-semibold underline">Login</Link> to save your cart across devices.</span>
+              </div>
+            )}
+            {activeCart.map((item) => (
               <div key={item.product_id} className="card p-4 md:p-5">
                 <div className="flex gap-4">
                   {/* Image */}
-                  <Link to={`/products/${item.product_id}`} className="shrink-0">
+                  <Link to={`/p/${item.product_id}`} className="shrink-0">
                     <div className="w-20 h-20 md:w-24 md:h-24 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden">
                       {item.image ? (
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
@@ -131,7 +137,7 @@ export default function CartPage() {
 
                   {/* Details */}
                   <div className="flex-1 min-w-0">
-                    <Link to={`/products/${item.product_id}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 text-sm md:text-base">
+                    <Link to={`/p/${item.product_id}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 text-sm md:text-base">
                       {item.name}
                     </Link>
                     <p className="text-sm text-gray-500 mt-0.5">
@@ -153,12 +159,16 @@ export default function CartPage() {
                         </span>
                         <button
                           onClick={() => updateQty(item.product_id, item.quantity + 1)}
-                          disabled={updatingId === item.product_id}
+                          disabled={updatingId === item.product_id || (item.stock !== undefined && item.quantity >= item.stock)}
+                          title={item.stock !== undefined && item.quantity >= item.stock ? `Only ${item.stock} in stock` : undefined}
                           className="p-2 hover:bg-gray-50 rounded-r-lg transition-colors disabled:opacity-30"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      {item.stock !== undefined && item.quantity >= item.stock && (
+                        <span className="text-[11px] text-amber-600 font-medium">Max stock ({item.stock})</span>
+                      )}
 
                       {/* Total & Remove */}
                       <div className="flex items-center gap-3">
@@ -225,7 +235,7 @@ export default function CartPage() {
               <div className="border-t border-gray-100 pt-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
-                  <span className="font-medium">₹{(cartTotal / 100).toLocaleString('en-IN')}</span>
+                  <span className="font-medium">₹{(activeTotal / 100).toLocaleString('en-IN')}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-sm">
@@ -239,8 +249,8 @@ export default function CartPage() {
                     {shipping === 0 ? 'FREE' : `₹${(shipping / 100).toLocaleString('en-IN')}`}
                   </span>
                 </div>
-                {shipping > 0 && (
-                  <p className="text-[11px] text-amber-600">Add ₹{((99900 - cartTotal) / 100).toLocaleString('en-IN')} more for free shipping!</p>
+                {shipping > 0 && activeTotal > 0 && (
+                  <p className="text-[11px] text-amber-600">Add ₹{((FREE_SHIPPING_THRESHOLD - activeTotal) / 100).toLocaleString('en-IN')} more for free shipping!</p>
                 )}
               </div>
 

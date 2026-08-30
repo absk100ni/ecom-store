@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Navigate, Link } from 'react-router-dom';
-import { Package, ChevronRight, Home, Calendar, MapPin, CreditCard, Truck, Eye } from 'lucide-react';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Package, ChevronRight, Home, Calendar, MapPin, CreditCard, Truck, Eye, Loader2 } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
 import { useStore } from '../store/useStore';
 import * as api from '../services/api';
+import toast from 'react-hot-toast';
+import { STORE_NAME } from '../config/constants';
+import { retryRazorpayPayment } from '../lib/razorpay';
 
 const statusConfig: Record<string, { color: string; bg: string; icon: string }> = {
   placed: { color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200', icon: '📦' },
@@ -14,9 +18,11 @@ const statusConfig: Record<string, { color: string; bg: string; icon: string }> 
 
 export default function OrdersPage() {
   const { isAuth } = useStore();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuth) {
@@ -29,8 +35,54 @@ export default function OrdersPage() {
 
   if (!isAuth) return <Navigate to="/login" />;
 
+  const isUnpaid = (order: any): boolean => {
+    const status = (order.status || '').toLowerCase();
+    const paymentStatus = (order.payment_status || '').toLowerCase();
+    // Show retry button when: payment not completed AND order not cancelled/delivered/expired
+    return (
+      paymentStatus !== 'paid' &&
+      paymentStatus !== 'completed' &&
+      status !== 'cancelled' &&
+      status !== 'delivered' &&
+      status !== 'expired'
+    );
+  };
+
+  const handleCompletePayment = async (order: any) => {
+    const oid = order.id || order.ID;
+    const onum = order.order_number || order.OrderNumber || order.id?.slice(0, 8);
+    setPayingOrderId(oid);
+    try {
+      const ok = await retryRazorpayPayment(oid, onum, {
+        onSuccess: () => {
+          setPayingOrderId(null);
+          // Refresh orders to update payment status
+          api.getOrders()
+            .then((r) => setOrders(r.data.orders || []))
+            .catch(() => {});
+          navigate(`/orders/${oid}`);
+        },
+        onDismiss: () => {
+          setPayingOrderId(null);
+          toast('Payment not completed. You can try again anytime.');
+        },
+        onVerifyFail: () => {
+          setPayingOrderId(null);
+        },
+      });
+      if (!ok) {
+        toast.error('Payment gateway unavailable. Please try again later.');
+        setPayingOrderId(null);
+      }
+    } catch {
+      toast.error('Failed to initiate payment. Please try again.');
+      setPayingOrderId(null);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
+      <Helmet><title>My Orders - {STORE_NAME}</title><meta name="description" content={`View and track your ${STORE_NAME} orders`} /></Helmet>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link to="/" className="hover:text-primary-600 flex items-center gap-1">
@@ -67,6 +119,7 @@ export default function OrdersPage() {
           {orders.map((order) => {
             const config = statusConfig[order.status] || statusConfig.placed;
             const isExpanded = expandedOrder === order.id;
+            const unpaid = isUnpaid(order);
 
             return (
               <div key={order.id} className="card overflow-hidden">
@@ -77,13 +130,18 @@ export default function OrdersPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <span className="font-mono text-sm font-bold text-gray-900">
                           {order.order_number || `#${order.id?.slice(0, 8)}`}
                         </span>
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border ${config.bg} ${config.color}`}>
                           {config.icon} {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
                         </span>
+                        {unpaid && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border bg-amber-50 border-amber-200 text-amber-700">
+                            💳 Payment Pending
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
@@ -145,11 +203,31 @@ export default function OrdersPage() {
 
                     {/* Tracking */}
                     {order.tracking_id && (
-                      <div className="flex items-center gap-2 bg-primary-50 text-primary-700 rounded-xl px-4 py-2.5">
+                      <div className="flex items-center gap-2 bg-primary-50 text-primary-700 rounded-xl px-4 py-2.5 mb-3">
                         <Truck className="w-4 h-4" />
                         <span className="text-sm font-medium">Tracking: {order.tracking_id}</span>
                       </div>
                     )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <Link to={`/orders/${order.id}`} className="btn-primary text-sm inline-flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5" /> View Full Order & Tracking
+                      </Link>
+                      {/* P0-1: Complete Payment button for unpaid orders */}
+                      {unpaid && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCompletePayment(order); }}
+                          disabled={payingOrderId === order.id}
+                          className="btn-secondary text-sm inline-flex items-center gap-1 !border-amber-300 !text-amber-700 hover:!bg-amber-50"
+                        >
+                          {payingOrderId === order.id ? (
+                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing...</>
+                          ) : (
+                            <><CreditCard className="w-3.5 h-3.5" /> Complete Payment</>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

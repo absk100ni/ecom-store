@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Package, Minus, Plus, ChevronRight, Home, Truck, Shield, RefreshCw, Share2, Heart, Check, MapPin } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
 import { useStore } from '../store/useStore';
 import * as api from '../services/api';
 import toast from 'react-hot-toast';
 import StarRating from '../components/ui/StarRating';
 import ProductCard from '../components/ui/ProductCard';
+import { trackViewContent, trackAddToCart } from '../lib/analytics';
 
 function getProductRating(name: string): number {
   let hash = 0;
@@ -34,6 +36,12 @@ export default function ProductDetailPage() {
     if (id) {
       api.getProduct(id).then((r) => {
         setProduct(r.data);
+        // Canonicalize: any arrival path (/products/:id, /p/:uuid) silently
+        // upgrades to the one shareable URL — /p/:slug — without a reload.
+        if (r.data.slug && window.location.pathname !== `/p/${r.data.slug}`) {
+          window.history.replaceState(null, '', `/p/${r.data.slug}`);
+        }
+        trackViewContent(r.data.id || id, r.data.name || '', r.data.price || 0);
         // Fetch related products
         if (r.data.category) {
           api.getProducts({ category: r.data.category, limit: 4 })
@@ -48,26 +56,39 @@ export default function ProductDetailPage() {
   }, [id]);
 
   const handleAddToCart = async () => {
-    if (!isAuth) { navigate('/login'); return; }
+    if (!isAuth) {
+      // Guest: local cart
+      const ok = useStore.getState().addToGuestCart({ product_id: product.id, name: product.name, price: product.price, image: product.thumbnail, stock: product.stock, quantity: qty });
+      if (!ok) { toast.error(`Only ${product.stock} available in stock`); return; }
+      toast.success(`Added ${qty} item(s) to cart!`);
+      trackAddToCart(product.id, product.name || '', product.price || 0, qty);
+      return;
+    }
     try {
       await api.addToCart(product.id, qty);
       toast.success(`Added ${qty} item(s) to cart!`);
+      trackAddToCart(product.id, product.name || '', product.price || 0, qty);
       const c = await api.getCart();
       useStore.getState().setCart(c.data.cart?.items || [], c.data.total || 0);
-    } catch {
-      toast.error('Failed to add to cart');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to add to cart');
     }
   };
 
   const handleBuyNow = async () => {
-    if (!isAuth) { navigate('/login'); return; }
+    if (!isAuth) {
+      // Guest: add to local cart then go to cart
+      useStore.getState().addToGuestCart({ product_id: product.id, name: product.name, price: product.price, image: product.thumbnail, stock: product.stock, quantity: qty });
+      navigate('/cart');
+      return;
+    }
     try {
       await api.addToCart(product.id, qty);
       const c = await api.getCart();
       useStore.getState().setCart(c.data.cart?.items || [], c.data.total || 0);
       navigate('/cart');
-    } catch {
-      toast.error('Failed');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed');
     }
   };
 
@@ -80,11 +101,13 @@ export default function ProductDetailPage() {
   };
 
   const handleShare = () => {
+    // Canonical short link for reels/comments — slug-based, resolves via /p/:slug
+    const shareUrl = `${window.location.origin}/p/${product.slug || product.id}`;
     if (navigator.share) {
-      navigator.share({ title: product.name, url: window.location.href });
+      navigator.share({ title: product.name, url: shareUrl }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      toast.success('Link copied!');
+      navigator.clipboard.writeText(shareUrl);
+      toast.success('Product link copied — paste it in your reel/video comments!');
     }
   };
 
@@ -111,6 +134,10 @@ export default function ProductDetailPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      <Helmet>
+        <title>{product.name} - LucubraElec</title>
+        <meta name="description" content={product.description || `Buy ${product.name} at the best price on LucubraElec`} />
+      </Helmet>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link to="/" className="hover:text-primary-600 flex items-center gap-1">
@@ -285,6 +312,13 @@ export default function ProductDetailPage() {
 
           {/* SKU */}
           <p className="text-xs text-gray-400 mt-4">SKU: {product.sku || 'N/A'}</p>
+
+          {/* Partial payment hint */}
+          {product.price > 100000 && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">
+              💳 Pay ₹{(Math.round(product.price * (product.advance_percent || 20) / 100) / 100).toLocaleString('en-IN')} now, rest on delivery
+            </p>
+          )}
         </div>
       </div>
 
@@ -344,14 +378,7 @@ export default function ProductDetailPage() {
             </div>
           )}
           {activeTab === 'reviews' && (
-            <div className="text-center py-10">
-              <p className="text-gray-500">Customer reviews coming soon!</p>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <StarRating rating={rating} size="md" />
-                <span className="text-sm font-medium text-gray-700">{rating}.0 out of 5</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Based on {reviewCount} ratings</p>
-            </div>
+            <ReviewsSection productId={product.id} rating={rating} reviewCount={reviewCount} />
           )}
         </div>
       </div>
@@ -387,6 +414,120 @@ export default function ProductDetailPage() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReviewsSection({ productId, rating, reviewCount }: { productId: string; rating: number; reviewCount: number }) {
+  const { isAuth } = useStore();
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newText, setNewText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.getProductReviews(productId, { page, limit: 5 })
+      .then((r) => {
+        setReviews(r.data.reviews || []);
+        setTotal(r.data.total || 0);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [productId, page]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await api.createReview(productId, { rating: newRating, comment: newText });
+      toast.success('Review submitted!');
+      setShowForm(false);
+      setNewText('');
+      const r = await api.getProductReviews(productId, { page: 1, limit: 5 });
+      setReviews(r.data.reviews || []);
+      setTotal(r.data.total || 0);
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to submit review');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div>
+      {/* Summary */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="text-center">
+          <p className="text-4xl font-bold text-gray-900">{rating}.0</p>
+          <StarRating rating={rating} size="md" />
+          <p className="text-xs text-gray-500 mt-1">{reviewCount} ratings</p>
+        </div>
+        <div className="flex-1" />
+        {isAuth && (
+          <button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm">
+            Write a Review
+          </button>
+        )}
+      </div>
+
+      {/* Write Review Form */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="card p-4 mb-6 space-y-3">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Rating</label>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button key={s} type="button" onClick={() => setNewRating(s)}
+                  className={`text-2xl ${s <= newRating ? 'text-amber-400' : 'text-gray-300'}`}>★</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Your Review</label>
+            <textarea className="input-field min-h-[80px]" placeholder="Share your experience..." value={newText}
+              onChange={(e) => setNewText(e.target.value)} required />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={submitting} className="btn-primary text-sm">
+              {submitting ? 'Submitting...' : 'Submit Review'}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {/* Review List */}
+      {loading ? (
+        <div className="space-y-4">{[1, 2, 3].map((i) => <div key={i} className="h-20 shimmer rounded-xl" />)}</div>
+      ) : reviews.length === 0 ? (
+        <p className="text-gray-500 text-sm text-center py-8">No reviews yet. Be the first to review!</p>
+      ) : (
+        <div className="space-y-4">
+          {reviews.map((r: any, idx: number) => (
+            <div key={idx} className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex">{[1, 2, 3, 4, 5].map((s) => <span key={s} className={`text-sm ${s <= (r.rating || 0) ? 'text-amber-400' : 'text-gray-300'}`}>★</span>)}</div>
+                <span className="text-sm font-medium text-gray-700">{r.user_name || 'Customer'}</span>
+                {r.is_verified && <span className="badge text-[10px]">Verified Purchase</span>}
+              </div>
+              <p className="text-sm text-gray-600">{r.text || r.comment}</p>
+              {r.created_at && <p className="text-xs text-gray-400 mt-2">{new Date(r.created_at).toLocaleDateString('en-IN')}</p>}
+            </div>
+          ))}
+          {total > 5 && (
+            <div className="flex justify-center gap-2 pt-2">
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="btn-secondary text-sm px-3 py-1.5">Prev</button>
+              <span className="text-sm text-gray-500 py-1.5">Page {page}</span>
+              <button disabled={reviews.length < 5} onClick={() => setPage(page + 1)} className="btn-secondary text-sm px-3 py-1.5">Next</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
