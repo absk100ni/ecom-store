@@ -5,6 +5,7 @@ import { Helmet } from 'react-helmet-async';
 import * as api from '../services/api';
 import toast from 'react-hot-toast';
 import { STORE_NAME } from '../config/constants';
+import { getGuestOrders, removeGuestOrder, GuestOrderRef } from '../utils/guestOrders';
 
 interface TrackedOrder {
   order_number: string;
@@ -39,13 +40,9 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<TrackedOrder | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<GuestOrderRef[]>(getGuestOrders());
 
-  const handleTrack = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const onum = orderNumber.trim();
-    const ph = phone.trim();
-    if (!onum) { toast.error('Please enter your order number'); return; }
-    if (ph.length !== 10) { toast.error('Please enter a valid 10-digit phone number'); return; }
+  const trackOrder = async (onum: string, ph: string) => {
     setLoading(true);
     setNotFound(false);
     setOrder(null);
@@ -55,12 +52,30 @@ export default function TrackOrderPage() {
     } catch (err: any) {
       if (err.response?.status === 404) {
         setNotFound(true);
+        // Purged/abandoned orders 404 forever — drop them from local history
+        removeGuestOrder(onum);
+        setRecentOrders(getGuestOrders());
       } else {
         toast.error(err.response?.data?.error || 'Failed to track order');
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTrack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const onum = orderNumber.trim();
+    const ph = phone.trim();
+    if (!onum) { toast.error('Please enter your order number'); return; }
+    if (ph.length !== 10) { toast.error('Please enter a valid 10-digit phone number'); return; }
+    await trackOrder(onum, ph);
+  };
+
+  const handleRecentClick = (ref: GuestOrderRef) => {
+    setOrderNumber(ref.order_number);
+    setPhone(ref.phone);
+    trackOrder(ref.order_number, ref.phone);
   };
 
   const statusIdx = order ? getStatusIndex(order.status) : -1;
@@ -119,6 +134,33 @@ export default function TrackOrderPage() {
           </button>
         </div>
       </form>
+
+      {/* Recent orders on this device — saved at checkout so guests don't need
+          to remember their order number */}
+      {recentOrders.length > 0 && !order && (
+        <div className="card p-6 mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Your recent orders on this device</h2>
+          <div className="space-y-2">
+            {recentOrders.map((ref) => (
+              <button
+                key={ref.order_number}
+                onClick={() => handleRecentClick(ref)}
+                disabled={loading}
+                className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors text-left"
+              >
+                <div>
+                  <span className="font-mono font-semibold text-primary-700">{ref.order_number}</span>
+                  <p className="text-xs text-gray-500">
+                    {new Date(ref.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {ref.total > 0 && <> · ₹{Math.round(ref.total / 100)}</>}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Not Found */}
       {notFound && (

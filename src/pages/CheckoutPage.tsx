@@ -9,6 +9,7 @@ import StripePaymentForm from '../components/checkout/StripePaymentForm';
 import { trackBeginCheckout, trackPurchase } from '../lib/analytics';
 import { STORE_NAME, getShippingCost, FREE_SHIPPING_THRESHOLD } from '../config/constants';
 import { retryRazorpayPayment } from '../lib/razorpay';
+import { saveGuestOrder } from '../utils/guestOrders';
 
 declare global {
   interface Window { Cashfree: any; }
@@ -184,6 +185,14 @@ export default function CheckoutPage() {
         setOrderId(oid);
         setOrderNumber(onum);
         setSuccessData(order);
+        // Persist locally so the guest can re-find this order on /track even
+        // after closing the webview (order number is otherwise unrecoverable).
+        saveGuestOrder({
+          order_number: onum,
+          phone: addr.phone,
+          total: order.total || order.Total || 0,
+          created_at: new Date().toISOString(),
+        });
 
         // Guest payment
         const payRes = await api.guestCreatePayment(oid, gt);
