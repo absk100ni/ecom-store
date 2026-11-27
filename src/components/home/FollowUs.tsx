@@ -1,57 +1,36 @@
-import { Instagram, Youtube, Facebook } from 'lucide-react';
+import { ArrowUpRight, Facebook, Instagram, Youtube } from 'lucide-react';
 import { SOCIAL_CHANNELS, SocialChannel } from '../../config/social';
 
-const ICONS: Record<SocialChannel['name'], React.ReactNode> = {
-  Instagram: <Instagram className="w-7 h-7" />,
-  YouTube: <Youtube className="w-7 h-7" />,
-  Facebook: <Facebook className="w-7 h-7" />,
-};
-
-// Brand accent per channel (gradient for the icon tile)
-const ACCENTS: Record<SocialChannel['name'], string> = {
-  Instagram: 'from-pink-500 via-purple-500 to-orange-400',
-  YouTube: 'from-red-600 to-red-500',
-  Facebook: 'from-blue-600 to-blue-500',
+const icons: Record<SocialChannel['name'], React.ElementType> = {
+  Instagram,
+  YouTube: Youtube,
+  Facebook,
 };
 
 export default function FollowUs() {
   if (SOCIAL_CHANNELS.length === 0) return null;
 
   return (
-    <section className="py-12 bg-gray-50" aria-labelledby="follow-us-heading">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <h2 id="follow-us-heading" className="text-2xl md:text-3xl font-bold text-gray-900">
-            Follow Us for Deals & Reviews
-          </h2>
-          <p className="text-gray-500 mt-2">
-            New product drops, unboxings, and exclusive offers -- first on our channels
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
-          {SOCIAL_CHANNELS.map((channel) => (
-            <a
-              key={channel.name}
-              href={channel.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Follow us on ${channel.name} (opens in new tab)`}
-              className="group flex items-center gap-4 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all"
-            >
-              <div
-                className={`w-14 h-14 rounded-xl bg-gradient-to-br ${ACCENTS[channel.name]} flex items-center justify-center text-white shrink-0`}
-              >
-                {ICONS[channel.name]}
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                  {channel.name}
-                </p>
-                <p className="text-sm text-gray-500 truncate">{channel.handle}</p>
-                <p className="text-xs text-gray-400">{channel.cta}</p>
-              </div>
-            </a>
-          ))}
+    <section className="max-w-7xl mx-auto px-4 py-12 md:py-16">
+      <div className="border border-slate-200 bg-white p-6 md:p-8">
+        <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-8 items-center">
+          <div>
+            <p className="eyebrow">Product guides and updates</p>
+            <h2 className="section-heading">Find us on social</h2>
+            <p className="section-subheading">Open a channel to view the content published there.</p>
+          </div>
+          <div className="grid sm:grid-cols-3 border-t sm:border-t-0 sm:border-l border-slate-200">
+            {SOCIAL_CHANNELS.map((channel) => {
+              const Icon = icons[channel.name];
+              return (
+                <a key={channel.name} href={channel.url} target="_blank" rel="noopener noreferrer" className="group p-5 border-b sm:border-b-0 sm:border-r border-slate-200 hover:bg-slate-50">
+                  <div className="flex justify-between items-start"><Icon className="w-5 h-5 text-slate-700" /><ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600" /></div>
+                  <p className="font-semibold text-slate-950 mt-4">{channel.name}</p>
+                  <p className="text-xs text-slate-500 mt-1 truncate">{channel.handle}</p>
+                </a>
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>

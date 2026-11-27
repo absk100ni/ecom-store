@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
-import { Package, Home, ChevronRight, MapPin, CreditCard, Truck, CheckCircle, Clock, Circle, FileText, RotateCcw, X, Loader2 } from 'lucide-react';
+import { Package, Home, ChevronRight, MapPin, CreditCard, Truck, CheckCircle, Clock, Circle, FileText, RotateCcw, X, XCircle, Loader2 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { useStore } from '../store/useStore';
 import * as api from '../services/api';
@@ -26,6 +26,7 @@ export default function OrderDetailPage() {
   const [returnForm, setReturnForm] = useState<{ type: 'return' | 'replacement'; items: { product_id: string; quantity: number }[]; reason: string }>({ type: 'return', items: [], reason: '' });
   const [submittingReturn, setSubmittingReturn] = useState(false);
   const [payingOrder, setPayingOrder] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
 
   useEffect(() => {
     if (isAuth && id) {
@@ -37,7 +38,7 @@ export default function OrderDetailPage() {
         .then(([or, tr, ret]) => {
           setOrder(or.data.order || or.data);
           setTracking(tr.data);
-          setReturnRequest(ret.data);
+          setReturnRequest(ret.data?.return_request || null);
         })
         .catch(() => {})
         .finally(() => setLoading(false));
@@ -74,7 +75,7 @@ export default function OrderDetailPage() {
   const paymentPlan = order.payment_plan || 'full';
   const trackingEvents = tracking?.events || [];
 
-  const isPaid = order.payment_status === 'paid' || paymentPlan === 'full' || advanceAmount > 0;
+  const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
   const isPendingPayment = order.payment_status !== 'paid' && order.payment_status !== 'completed'
     && status !== 'cancelled' && status !== 'delivered' && status !== 'expired';
   const isDelivered = status === 'delivered';
@@ -101,11 +102,26 @@ export default function OrderDetailPage() {
       setPayingOrder(false);
     }
   };
+  const handleCancelOrder = async () => {
+    if (!id || !window.confirm('Cancel this order? Reserved stock will be released and any captured online payment will be sent for refund.')) return;
+    setCancellingOrder(true);
+    try {
+      await api.cancelOrder(id, 'Cancelled by customer');
+      const response = await api.getOrder(id);
+      setOrder(response.data.order || response.data);
+      toast.success('Order cancelled');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Order could not be cancelled');
+    } finally {
+      setCancellingOrder(false);
+    }
+  };
   const deliveredAt = order.delivered_at ? new Date(order.delivered_at) : null;
   const withinReturnWindow = deliveredAt
     ? (Date.now() - deliveredAt.getTime()) < BUSINESS.returnWindowDays * 24 * 60 * 60 * 1000
     : false;
   const canReturn = isDelivered && withinReturnWindow && !returnRequest;
+  const canCancel = status === 'placed' || status === 'confirmed';
 
   const handleDownloadInvoice = async () => {
     try {
@@ -131,7 +147,7 @@ export default function OrderDetailPage() {
     setSubmittingReturn(true);
     try {
       const res = await api.createReturnRequest(id!, returnForm);
-      setReturnRequest(res.data);
+      setReturnRequest(res.data?.return_request || res.data);
       setShowReturnModal(false);
       toast.success('Return request submitted successfully');
     } catch {
@@ -189,6 +205,12 @@ export default function OrderDetailPage() {
           {isPendingPayment && (
             <button onClick={handleCompletePayment} disabled={payingOrder} className="btn-primary flex items-center gap-2 text-sm">
               {payingOrder ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><CreditCard className="w-4 h-4" /> Complete Payment</>}
+            </button>
+          )}
+          {canCancel && (
+            <button onClick={handleCancelOrder} disabled={cancellingOrder} className="btn-secondary flex items-center gap-2 text-sm !text-red-700 !border-red-300 hover:!bg-red-50">
+              {cancellingOrder ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+              {cancellingOrder ? 'Cancelling...' : 'Cancel order'}
             </button>
           )}
           {canReturn && (
@@ -270,6 +292,7 @@ export default function OrderDetailPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.name || item.product_name}</p>
+                  {item.variant_label && <p className="text-xs text-gray-500">{item.variant_label}</p>}
                   <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{((item.price || 0) / 100).toLocaleString('en-IN')}</p>
                 </div>
                 <span className="text-sm font-bold text-gray-900 shrink-0">
@@ -290,13 +313,13 @@ export default function OrderDetailPage() {
               <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-semibold">₹{((order.total || 0) / 100).toLocaleString('en-IN')}</span></div>
               {paymentPlan === 'partial' && (
                 <>
-                  <div className="flex justify-between text-green-700"><span>Paid Online</span><span className="font-semibold">₹{(advanceAmount / 100).toLocaleString('en-IN')}</span></div>
+                  <div className={`flex justify-between ${isPaid ? 'text-green-700' : 'text-amber-700'}`}><span>{isPaid ? 'Paid Online' : 'Online Payment Due'}</span><span className="font-semibold">₹{(advanceAmount / 100).toLocaleString('en-IN')}</span></div>
                   <div className="flex justify-between text-amber-700"><span>COD Due</span><span className="font-semibold">₹{(codAmount / 100).toLocaleString('en-IN')}</span></div>
                   {order.cod_collected && <p className="text-xs text-green-600 mt-1">✓ COD collected</p>}
                 </>
               )}
               {paymentPlan === 'full' && (
-                <div className="flex justify-between text-green-700"><span>Paid Online</span><span className="font-semibold">₹{((order.total || 0) / 100).toLocaleString('en-IN')}</span></div>
+                <div className={`flex justify-between ${isPaid ? 'text-green-700' : 'text-amber-700'}`}><span>{isPaid ? 'Paid Online' : 'Online Payment Due'}</span><span className="font-semibold">₹{((order.total || 0) / 100).toLocaleString('en-IN')}</span></div>
               )}
             </div>
           </div>

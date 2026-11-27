@@ -18,7 +18,8 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { setAuth } = useStore();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/';
+  const requestedRedirect = searchParams.get('redirect') || '/';
+  const redirectTo = requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//') ? requestedRedirect : '/';
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   const handleGoogleResponse = useCallback(async (response: any) => {
@@ -26,17 +27,26 @@ export default function LoginPage() {
       const r = await api.googleLogin(response.credential);
       setAuth(r.data.user, r.data.token);
       // Merge guest cart to server
-      const { guestCart, clearGuestCart } = useStore.getState();
+      const { guestCart, removeFromGuestCart } = useStore.getState();
       if (guestCart.length > 0) {
+        let failed = 0;
         for (const item of guestCart) {
-          try { await api.addToCart(item.product_id, item.quantity); } catch { /* best-effort */ }
+          try {
+            await api.addToCart(item.product_id, item.quantity, item.variant_id);
+            removeFromGuestCart(item.product_id, item.variant_id);
+          } catch {
+            failed++;
+          }
         }
-        clearGuestCart();
         const c = await api.getCart();
         useStore.getState().setCart(c.data.cart?.items || [], c.data.total || 0);
-        toast.success('Welcome! Cart restored 🛒');
+        if (failed > 0) {
+          toast.error(`${failed} cart item${failed === 1 ? '' : 's'} could not be merged and remain in your guest cart.`);
+        } else {
+          toast.success('Welcome! Cart restored');
+        }
       } else {
-        toast.success('Welcome! 🎉');
+        toast.success('Welcome!');
       }
       navigate(redirectTo);
     } catch {
@@ -54,8 +64,11 @@ export default function LoginPage() {
         client_id: googleClientId,
         callback: handleGoogleResponse,
       });
+      const container = document.getElementById('google-signin-btn');
+      if (!container) return;
+      container.replaceChildren();
       (window as any).google?.accounts.id.renderButton(
-        document.getElementById('google-signin-btn'),
+        container,
         { theme: 'outline', size: 'large', width: '100%', text: 'continue_with' }
       );
     };
@@ -86,17 +99,26 @@ export default function LoginPage() {
       const r = await api.verifyOTP(phone, otp);
       setAuth(r.data.user, r.data.token);
       // Merge guest cart to server
-      const { guestCart, clearGuestCart } = useStore.getState();
+      const { guestCart, removeFromGuestCart } = useStore.getState();
       if (guestCart.length > 0) {
+        let failed = 0;
         for (const item of guestCart) {
-          try { await api.addToCart(item.product_id, item.quantity); } catch { /* best-effort */ }
+          try {
+            await api.addToCart(item.product_id, item.quantity, item.variant_id);
+            removeFromGuestCart(item.product_id, item.variant_id);
+          } catch {
+            failed++;
+          }
         }
-        clearGuestCart();
         const c = await api.getCart();
         useStore.getState().setCart(c.data.cart?.items || [], c.data.total || 0);
-        toast.success(`Welcome to ${STORE_NAME}! Cart restored 🛒`);
+        if (failed > 0) {
+          toast.error(`${failed} cart item${failed === 1 ? '' : 's'} could not be merged and remain in your guest cart.`);
+        } else {
+          toast.success(`Welcome to ${STORE_NAME}! Cart restored`);
+        }
       } else {
-        toast.success(`Welcome to ${STORE_NAME}! 🎉`);
+        toast.success(`Welcome to ${STORE_NAME}!`);
       }
       navigate(redirectTo);
     } catch {
@@ -116,13 +138,13 @@ export default function LoginPage() {
         </Link>
 
         {/* Card */}
-        <div className="card p-8">
+        <div className="card p-8 border-t-4 border-t-amber-400">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/20">
-              <Zap className="w-8 h-8 text-white" />
+            <div className="w-14 h-14 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <Zap className="w-7 h-7 text-amber-400" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Welcome Back!</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
             <p className="text-sm text-gray-500 mt-1">Login to your {STORE_NAME} account</p>
           </div>
 
@@ -260,7 +282,7 @@ export default function LoginPage() {
         {/* Trust */}
         <div className="flex items-center justify-center gap-2 mt-6 text-xs text-gray-400">
           <Shield className="w-3.5 h-3.5" />
-          <span>Your data is protected with end-to-end encryption</span>
+          <span>Sign-in and payment details are sent over HTTPS</span>
         </div>
       </div>
     </div>

@@ -15,10 +15,28 @@ declare global {
   interface Window { Cashfree: any; }
 }
 
+let cashfreeScriptPromise: Promise<void> | null = null;
+function ensureCashfreeLoaded(): Promise<void> {
+  if (window.Cashfree) return Promise.resolve();
+  if (cashfreeScriptPromise) return cashfreeScriptPromise;
+  cashfreeScriptPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.async = true;
+    script.onload = () => window.Cashfree ? resolve() : reject(new Error('Cashfree checkout did not initialize'));
+    script.onerror = () => reject(new Error('Cashfree checkout could not be loaded'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    cashfreeScriptPromise = null;
+    throw error;
+  });
+  return cashfreeScriptPromise!;
+}
+
 type Step = 'address' | 'review' | 'payment' | 'success' | 'payment-pending';
 
 export default function CheckoutPage() {
-  const { isAuth, cart, cartTotal, setCart, guestCart, guestCartTotal, clearGuestCart } = useStore();
+  const { isAuth, cart, cartTotal, setCart, guestCart, guestCartTotal, clearGuestCart, replaceGuestCart } = useStore();
   const navigate = useNavigate();
   const isGuest = !isAuth;
   const activeCart = isGuest ? guestCart : cart;
@@ -26,6 +44,7 @@ export default function CheckoutPage() {
 
   const [step, setStep] = useState<Step>('address');
   const [loading, setLoading] = useState(false);
+  const [checkingDelivery, setCheckingDelivery] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [guestToken, setGuestToken] = useState('');
@@ -38,9 +57,17 @@ export default function CheckoutPage() {
   const [successData, setSuccessData] = useState<any>(null);
   const [stripePayData, setStripePayData] = useState<any>(null);
   const [retryingPayment, setRetryingPayment] = useState(false);
+  const [checkoutAvailable, setCheckoutAvailable] = useState<boolean | null>(null);
 
   // P0-2: double-click guard
   const isSubmittingRef = useRef(false);
+
+  // Fail closed when runtime checkout status cannot be confirmed.
+  useEffect(() => {
+    api.getCheckoutStatus()
+      .then((response) => setCheckoutAvailable(response.data.enabled === true))
+      .catch(() => setCheckoutAvailable(false));
+  }, []);
 
   useEffect(() => {
     if (isAuth) {
@@ -58,6 +85,21 @@ export default function CheckoutPage() {
           }
         })
         .catch(() => {});
+    } else {
+      const stored = useStore.getState().guestCart;
+      if (stored.length > 0) {
+        Promise.all(stored.map(async (item) => {
+          try {
+            const response = await api.getProduct(item.product_id);
+            const product = response.data;
+            const variant = item.variant_id ? (product.variants || []).find((option: any) => option.id === item.variant_id) : null;
+            if ((product.variants || []).length > 0 && !variant) return { ...item, stock: 0, available: false };
+            return { ...item, name: product.name, price: variant?.price > 0 ? variant.price : product.price, variant_label: variant ? `${variant.name}: ${variant.value}` : undefined, image: product.thumbnail, stock: variant ? Math.min(product.stock, variant.stock) : product.stock, available: product.is_active !== false };
+          } catch {
+            return { ...item, stock: 0, available: false };
+          }
+        })).then(replaceGuestCart);
+      }
     }
   }, [isAuth]);
 
@@ -83,20 +125,38 @@ export default function CheckoutPage() {
     }
   };
 
-  const handleAddressSubmit = (e: React.FormEvent) => {
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (checkoutAvailable !== true) {
+      toast.error('Checkout is temporarily unavailable. Please try again later.');
+      return;
+    }
     if (!addr.name || !addr.line1 || !addr.city || !addr.state || !addr.pincode || !addr.phone) {
       toast.error('Please fill all required fields'); return;
     }
     if (addr.phone.length !== 10) { toast.error('Please enter a valid 10-digit phone number'); return; }
-    if (addr.pincode.length !== 6) { toast.error('Please enter a valid 6-digit pincode'); return; }
-    setStep('review');
+    if (addr.pincode.length !== 6 || addr.pincode.startsWith('0')) { toast.error('Please enter a valid 6-digit pincode'); return; }
+
+    setCheckingDelivery(true);
+    try {
+      const response = await api.checkServiceability(addr.pincode);
+      if (!response.data.serviceable) {
+        toast.error('Delivery is not available for this pincode.');
+        return;
+      }
+      setStep('review');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Delivery availability could not be confirmed. Please try again.');
+    } finally {
+      setCheckingDelivery(false);
+    }
   };
 
   // ========== CASHFREE PAYMENT ==========
   const openCashfree = async (payData: any, oid: string, onum: string) => {
     setStep('payment');
     try {
+      await ensureCashfreeLoaded();
       const cashfree = await window.Cashfree({
         mode: payData.cashfree_env === 'production' ? 'production' : 'sandbox',
       });
@@ -158,9 +218,18 @@ export default function CheckoutPage() {
 
   // ========== PLACE ORDER & PAY ==========
   const handlePlaceAndPay = async () => {
+    if (checkoutAvailable !== true) {
+      toast.error('Checkout is temporarily unavailable. Please try again later.');
+      return;
+    }
     if (isSubmittingRef.current) return;
     if (activeCart.length === 0) {
       toast.error('Your cart is empty');
+      navigate('/cart');
+      return;
+    }
+    if (activeCart.some((item: any) => item.available === false || (item.stock !== undefined && item.quantity > item.stock))) {
+      toast.error('Your cart contains unavailable items. Review your cart before checkout.');
       navigate('/cart');
       return;
     }
@@ -172,7 +241,7 @@ export default function CheckoutPage() {
       if (isGuest) {
         // Guest order flow
         const orderRes = await api.guestCreateOrder({
-          items: guestCart.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+          items: guestCart.map((i) => ({ product_id: i.product_id, variant_id: i.variant_id, quantity: i.quantity })),
           shipping_address: addr,
           payment_plan: paymentPlan,
           ...(couponCode ? { coupon_code: couponCode } : {}),
@@ -206,10 +275,12 @@ export default function CheckoutPage() {
           }, gt).catch(() => { setStep('review'); });
         } else if (payData.gateway === 'cashfree' && payData.payment_session_id) {
           openCashfree(payData, oid, onum);
-        } else {
-          toast.success('🎉 Order placed!');
+        } else if (payData.gateway === 'mock' && import.meta.env.DEV) {
+          toast.success('Development order placed with mock payment');
           clearGuestCart();
           setStep('success');
+        } else {
+          throw new Error('Payment gateway is unavailable');
         }
       } else {
         // Authed order flow (unchanged)
@@ -237,15 +308,26 @@ export default function CheckoutPage() {
           }).catch(() => { setStep('review'); });
         } else if (gateway === 'cashfree' && payData.payment_session_id) {
           openCashfree(payData, oid, onum);
-        } else {
-          toast.success('🎉 Order placed! (Payment skipped — no gateway configured)');
+        } else if (gateway === 'mock' && import.meta.env.DEV) {
+          toast.success('Development order placed with mock payment');
           setCart([], 0);
           setStep('success');
+        } else {
+          throw new Error('Payment gateway is unavailable');
         }
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to place order');
-      setStep('review');
+      const message = err.response?.data?.error || err.message || 'Failed to place order';
+      toast.error(message);
+      if (err.response?.status === 409 && message.toLowerCase().includes('price')) {
+        navigate('/cart');
+      } else if (err.response?.status === 409 && message.toLowerCase().includes('coupon')) {
+        setCouponCode('');
+        setCouponDiscount(0);
+        setStep('review');
+      } else {
+        setStep('review');
+      }
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
@@ -254,6 +336,10 @@ export default function CheckoutPage() {
 
   // P1-1: retry payment from payment-pending screen
   const handleRetryPayment = async () => {
+    if (checkoutAvailable !== true) {
+      toast.error('Checkout is temporarily unavailable. Please try again later.');
+      return;
+    }
     if (!orderId) return;
     setRetryingPayment(true);
     try {
@@ -303,6 +389,16 @@ export default function CheckoutPage() {
         <ChevronRight className="w-3.5 h-3.5" />
         <span className="text-gray-900 font-medium">Checkout</span>
       </nav>
+
+      {checkoutAvailable !== true && step !== 'success' && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-semibold">Checkout is temporarily unavailable</p>
+            <p className="mt-1 text-amber-800">You can continue browsing and keep items in your cart. Please try checkout again later.</p>
+          </div>
+        </div>
+      )}
 
       {/* Progress Steps */}
       {step !== 'success' && step !== 'payment-pending' && (
@@ -375,7 +471,7 @@ export default function CheckoutPage() {
           </p>
           <p className="text-sm text-gray-400 mb-8">Complete the payment now or pay later from your Orders page.</p>
           <div className="flex gap-3 justify-center">
-            <button onClick={handleRetryPayment} disabled={retryingPayment} className="btn-primary flex items-center gap-2">
+            <button onClick={handleRetryPayment} disabled={retryingPayment || checkoutAvailable !== true} className="btn-primary flex items-center gap-2">
               {retryingPayment ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><CreditCard className="w-4 h-4" /> Complete Payment</>}
             </button>
             {isAuth ? (
@@ -407,49 +503,49 @@ export default function CheckoutPage() {
                 </h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                    <input className="input-field" placeholder="John Doe" value={addr.name}
+                    <label htmlFor="checkout-name" className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                    <input id="checkout-name" autoComplete="name" className="input-field" placeholder="John Doe" value={addr.name}
                       onChange={(e) => setAddr({ ...addr, name: e.target.value })} required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
-                    <input className="input-field" placeholder="House/Flat No., Street Name" value={addr.line1}
+                    <label htmlFor="checkout-address-line1" className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
+                    <input id="checkout-address-line1" autoComplete="address-line1" className="input-field" placeholder="House/Flat No., Street Name" value={addr.line1}
                       onChange={(e) => setAddr({ ...addr, line1: e.target.value })} required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-                    <input className="input-field" placeholder="Landmark, Area (Optional)" value={addr.line2}
+                    <label htmlFor="checkout-address-line2" className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
+                    <input id="checkout-address-line2" autoComplete="address-line2" className="input-field" placeholder="Landmark, Area (Optional)" value={addr.line2}
                       onChange={(e) => setAddr({ ...addr, line2: e.target.value })} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-                      <input className="input-field" placeholder="City" value={addr.city}
+                      <label htmlFor="checkout-city" className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                      <input id="checkout-city" autoComplete="address-level2" className="input-field" placeholder="City" value={addr.city}
                         onChange={(e) => setAddr({ ...addr, city: e.target.value })} required />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-                      <input className="input-field" placeholder="State" value={addr.state}
+                      <label htmlFor="checkout-state" className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                      <input id="checkout-state" autoComplete="address-level1" className="input-field" placeholder="State" value={addr.state}
                         onChange={(e) => setAddr({ ...addr, state: e.target.value })} required />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
-                      <input className="input-field" placeholder="6-digit pincode" value={addr.pincode}
+                      <label htmlFor="checkout-pincode" className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
+                      <input id="checkout-pincode" autoComplete="postal-code" className="input-field" placeholder="6-digit pincode" value={addr.pincode}
                         onChange={(e) => setAddr({ ...addr, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         inputMode="numeric" required />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                      <input className="input-field" placeholder="10-digit phone number" value={addr.phone}
+                      <label htmlFor="checkout-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                      <input id="checkout-phone" autoComplete="tel" className="input-field" placeholder="10-digit phone number" value={addr.phone}
                         onChange={(e) => setAddr({ ...addr, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                         inputMode="numeric" required />
                     </div>
                   </div>
                 </div>
-                <button type="submit" className="btn-primary w-full mt-6 flex items-center justify-center gap-2">
-                  Continue to Review <ChevronRight className="w-4 h-4" />
+                <button type="submit" disabled={checkingDelivery || checkoutAvailable !== true} className="btn-primary w-full mt-6 flex items-center justify-center gap-2">
+                  {checkingDelivery ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking delivery...</> : <>Continue to Review <ChevronRight className="w-4 h-4" /></>}
                 </button>
               </form>
             )}
@@ -482,7 +578,7 @@ export default function CheckoutPage() {
                   </h3>
                   <div className="space-y-3">
                     {activeCart.map((item) => (
-                      <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                      <div key={`${item.product_id}:${item.variant_id || 'base'}`} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
                         <div className="w-14 h-14 bg-white rounded-lg flex items-center justify-center shrink-0 border">
                           {item.image ? (
                             <img src={item.image} alt="" className="w-full h-full object-cover rounded-lg" />
@@ -492,6 +588,7 @@ export default function CheckoutPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.name}</p>
+                          {item.variant_label && <p className="text-xs text-gray-500">{item.variant_label}</p>}
                           <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{(item.price / 100).toLocaleString('en-IN')}</p>
                         </div>
                         <span className="text-sm font-bold text-gray-900 shrink-0">
@@ -552,7 +649,7 @@ export default function CheckoutPage() {
                       </div>
                     </div>
 
-                    <button onClick={handlePlaceAndPay} disabled={loading || isSubmittingRef.current}
+                    <button onClick={handlePlaceAndPay} disabled={loading || isSubmittingRef.current || checkoutAvailable !== true}
                       className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-base">
                       {loading ? (
                         <><Loader2 className="w-5 h-5 animate-spin" /> Creating order & opening payment...</>
@@ -610,7 +707,7 @@ export default function CheckoutPage() {
               <h3 className="font-bold text-lg text-gray-900">Order Summary</h3>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {activeCart.map((item) => (
-                  <div key={item.product_id} className="flex items-center justify-between text-sm">
+                  <div key={`${item.product_id}:${item.variant_id || 'base'}`} className="flex items-center justify-between text-sm">
                     <span className="text-gray-600 line-clamp-1 flex-1">{item.name} × {item.quantity}</span>
                     <span className="font-medium ml-2">₹{((item.price * item.quantity) / 100).toLocaleString('en-IN')}</span>
                   </div>
@@ -636,10 +733,10 @@ export default function CheckoutPage() {
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {[
-                  { icon: Shield, label: 'Secure Checkout' },
-                  { icon: Truck, label: 'Fast Delivery' },
-                  { icon: CreditCard, label: 'Secure Payment' },
-                  { icon: CheckCircle, label: '100% Genuine' },
+                  { icon: Shield, label: 'Gateway Checkout' },
+                  { icon: Truck, label: 'Delivery Checked' },
+                  { icon: CreditCard, label: 'Amount Confirmed' },
+                  { icon: CheckCircle, label: 'Order Tracking' },
                 ].map((b) => (
                   <div key={b.label} className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
                     <b.icon className="w-3.5 h-3.5 text-primary-600" />

@@ -26,6 +26,25 @@ interface OpenRazorpayOpts {
   onVerifyFail: () => void;
 }
 
+let razorpayScriptPromise: Promise<void> | null = null;
+
+function ensureRazorpayLoaded(): Promise<void> {
+  if (window.Razorpay) return Promise.resolve();
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+  razorpayScriptPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => window.Razorpay ? resolve() : reject(new Error('Razorpay checkout did not initialize'));
+    script.onerror = () => reject(new Error('Razorpay checkout could not be loaded'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    razorpayScriptPromise = null;
+    throw error;
+  });
+  return razorpayScriptPromise!;
+}
+
 /** Open the Razorpay modal for a given payment payload. */
 export function openRazorpayModal(opts: OpenRazorpayOpts) {
   const { payData, orderId, orderNumber, prefillName, prefillPhone, guestToken, onSuccess, onDismiss, onVerifyFail } = opts;
@@ -87,6 +106,7 @@ export async function retryRazorpayPayment(
     : await api.createPayment(orderId);
   const payData = payRes.data;
   if (payData.gateway === 'razorpay' && payData.razorpay_key_id) {
+    await ensureRazorpayLoaded();
     openRazorpayModal({
       payData,
       orderId,

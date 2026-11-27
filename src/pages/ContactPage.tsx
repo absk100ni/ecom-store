@@ -101,31 +101,31 @@ export default function ContactPage() {
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input className="input-field" placeholder="Your name" value={form.name}
+                <label htmlFor="contact-name" className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input id="contact-name" autoComplete="name" className="input-field" placeholder="Your name" value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" className="input-field" placeholder="you@example.com" value={form.email}
+                <label htmlFor="contact-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input id="contact-email" autoComplete="email" type="email" className="input-field" placeholder="you@example.com" value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
-                <input className="input-field" placeholder="10-digit number" value={form.phone}
+                <label htmlFor="contact-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
+                <input id="contact-phone" autoComplete="tel" className="input-field" placeholder="10-digit number" value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} inputMode="numeric" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                <input className="input-field" placeholder="How can we help?" value={form.subject}
+                <label htmlFor="contact-subject" className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
+                <input id="contact-subject" className="input-field" placeholder="How can we help?" value={form.subject}
                   onChange={(e) => setForm({ ...form, subject: e.target.value })} required />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Message *</label>
-              <textarea className="input-field min-h-[120px] resize-y" placeholder="Describe your query in detail..."
+              <label htmlFor="contact-message" className="block text-sm font-medium text-gray-700 mb-1">Message *</label>
+              <textarea id="contact-message" className="input-field min-h-[120px] resize-y" placeholder="Describe your query in detail..."
                 value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} required />
             </div>
             <button type="submit" disabled={submitting} className="btn-primary flex items-center gap-2">

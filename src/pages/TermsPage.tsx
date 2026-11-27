@@ -19,13 +19,13 @@ export default function TermsPage() {
 
       <article className="prose prose-gray max-w-none">
         <h1>Terms of Service</h1>
-        <p className="text-sm text-gray-500">Last updated: July 2026</p>
+        <p className="text-sm text-gray-500">Last updated: November 2026</p>
 
         <h2>1. About Us</h2>
         <p>This website is operated by <strong>{BUSINESS.legalName}</strong>, registered at {BUSINESS.address}. GSTIN: {BUSINESS.gstin}.</p>
 
         <h2>2. Account</h2>
-        <p>You may create an account using your phone number or Google sign-in. You are responsible for maintaining the confidentiality of your credentials and for all activity under your account.</p>
+        <p>You may create an account using an available sign-in method, or complete an eligible purchase as a guest. You are responsible for activity performed through your authenticated session.</p>
 
         <h2>3. Pricing</h2>
         <p>All prices displayed are in Indian Rupees (₹) and inclusive of applicable taxes unless stated otherwise. Prices are internally tracked in paise (1/100th of a rupee) for precision; the displayed rupee amount is the binding price.</p>
@@ -44,7 +44,7 @@ export default function TermsPage() {
         <p>To the maximum extent permitted by law, {BUSINESS.legalName} shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of this site or purchase of products. Our total liability for any claim shall not exceed the amount you paid for the specific order giving rise to the claim.</p>
 
         <h2>8. Governing Law & Dispute Resolution</h2>
-        <p>These terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of courts in Bengaluru, Karnataka.</p>
+        <p>These terms are governed by the laws of India. Courts with jurisdiction under applicable Indian law will hear disputes that cannot be resolved through customer support.</p>
 
         <h2>9. Changes</h2>
         <p>We may update these terms from time to time. Continued use of the site after changes constitutes acceptance.</p>

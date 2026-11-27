@@ -11,12 +11,12 @@ interface TrackedOrder {
   order_number: string;
   status: string;
   payment_status: string;
-  items: { product_id: string; name: string; quantity: number; price: number; image?: string }[];
+  items: { product_id: string; name: string; variant_label?: string; quantity: number; price: number; image?: string }[];
   total: number;
   advance_amount: number;
   cod_amount: number;
   created_at: string;
-  tracking?: { carrier?: string; tracking_number?: string; url?: string; status?: string; estimated_delivery?: string };
+  tracking?: { awb?: string; courier_name?: string; events?: { status: string; description?: string; timestamp?: string }[] };
 }
 
 const STATUS_STEPS = [
@@ -105,8 +105,9 @@ export default function TrackOrderPage() {
         <p className="text-sm text-gray-500 mb-4">Enter your order number and the phone number used during checkout.</p>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Order Number *</label>
+            <label htmlFor="track-order-number" className="block text-sm font-medium text-gray-700 mb-1">Order Number *</label>
             <input
+              id="track-order-number"
               className="input-field"
               placeholder="e.g. ORD-123456789"
               value={orderNumber}
@@ -115,8 +116,9 @@ export default function TrackOrderPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+            <label htmlFor="track-phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
             <input
+              id="track-phone"
               className="input-field"
               placeholder="10-digit phone number"
               value={phone}
@@ -201,15 +203,19 @@ export default function TrackOrderPage() {
             </div>
 
             {/* Tracking details */}
-            {order.tracking?.tracking_number && (
+            {order.tracking?.awb && (
               <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
-                {order.tracking.carrier && <p className="text-gray-600">Carrier: <span className="font-medium">{order.tracking.carrier}</span></p>}
-                <p className="text-gray-600">Tracking #: <span className="font-mono font-medium">{order.tracking.tracking_number}</span></p>
-                {order.tracking.estimated_delivery && <p className="text-gray-600">Est. delivery: <span className="font-medium">{order.tracking.estimated_delivery}</span></p>}
-                {order.tracking.url && (
-                  <a href={order.tracking.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 font-medium hover:underline inline-block mt-1">
-                    Track with carrier →
-                  </a>
+                {order.tracking.courier_name && <p className="text-gray-600">Courier: <span className="font-medium">{order.tracking.courier_name}</span></p>}
+                <p className="text-gray-600">AWB: <span className="font-mono font-medium">{order.tracking.awb}</span></p>
+                {order.tracking.events && order.tracking.events.length > 0 && (
+                  <div className="pt-2 mt-2 border-t border-gray-200 space-y-2">
+                    {order.tracking.events.map((event, index) => (
+                      <div key={`${event.status}-${event.timestamp || index}`}>
+                        <p className="font-medium text-gray-700 capitalize">{event.status.replace(/_/g, ' ')}</p>
+                        {event.description && <p className="text-xs text-gray-500">{event.description}</p>}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -258,6 +264,7 @@ export default function TrackOrderPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.name}</p>
+                    {item.variant_label && <p className="text-xs text-gray-500">{item.variant_label}</p>}
                     <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{(item.price / 100).toLocaleString('en-IN')}</p>
                   </div>
                   <span className="text-sm font-bold text-gray-900 shrink-0">

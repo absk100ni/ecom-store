@@ -19,7 +19,7 @@ export default function RefundPolicyPage() {
 
       <article className="prose prose-gray max-w-none">
         <h1>Refund & Return Policy</h1>
-        <p className="text-sm text-gray-500">Last updated: July 2026</p>
+        <p className="text-sm text-gray-500">Last updated: November 2026</p>
 
         <h2>1. Return Window</h2>
         <p>We accept returns and replacements within <strong>{BUSINESS.returnWindowDays} days</strong> from the date of delivery. The item must be unused, in its original packaging, and with all accessories/tags intact.</p>
@@ -35,8 +35,8 @@ export default function RefundPolicyPage() {
         <h2>3. Refund Method & Timeline</h2>
         <ul>
           <li><strong>Online payment:</strong> Refunded to the original payment method within 5–7 business days after we receive the returned item.</li>
-          <li><strong>COD portion:</strong> The COD amount collected at delivery is not applicable for online refund. If the full order total was paid online (full-payment mode), the full amount is refunded.</li>
-          <li><strong>Partial payment orders:</strong> Only the advance amount paid online is refunded. The COD balance (not yet collected or already returned to you at pickup) is not processed.</li>
+          <li><strong>COD already collected:</strong> Any approved refundable COD amount requires a separate manual reimbursement. Support will confirm the method and reference; the return is not considered fully refunded until that reimbursement is recorded.</li>
+          <li><strong>Partial-payment orders before delivery:</strong> Only the online advance has been collected and is returned through the original payment gateway.</li>
         </ul>
 
         <h2>4. Non-Returnable Items</h2>
