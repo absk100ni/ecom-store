@@ -9,6 +9,9 @@ export interface SocialChannel {
 
 const env = import.meta.env;
 
+// Social channels stay hidden until brand-owned accounts are explicitly enabled.
+const socialEnabled = env.VITE_SOCIAL_ENABLED === 'true';
+
 export const SOCIAL_CHANNELS: SocialChannel[] = [
   {
     name: 'Instagram' as const,
@@ -28,4 +31,4 @@ export const SOCIAL_CHANNELS: SocialChannel[] = [
     handle: env.VITE_FACEBOOK_HANDLE || 'LucubraElec',
     cta: 'Deals & announcements',
   },
-].filter((c) => c.url !== '');
+].filter((c) => socialEnabled && c.url !== '');

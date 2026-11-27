@@ -7,6 +7,8 @@ React + TypeScript + Tailwind storefront for [LucubraElec.in](https://lucubraele
 ```bash
 npm install
 npm run dev
+npm run build
+npm run test:e2e
 ```
 
 Starts on **http://localhost:3000** (needs backend on :8080).
@@ -15,7 +17,7 @@ Starts on **http://localhost:3000** (needs backend on :8080).
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| Homepage | ✅ | Hero, category grid, featured, deal of the day |
+| Homepage | ✅ | Hardware/electronics marketplace layout, real categories, latest catalog items, catalog-backed price reductions |
 | Product listing | ✅ | Grid/list, category sidebar (slug-based filters), sort, search autocomplete |
 | Product detail | ✅ | Gallery, variants, serviceability check, share button (canonical URL) |
 | Canonical URLs | ✅ | `/p/{slug}` everywhere; legacy `/products/{id}` canonicalizes via history.replaceState |
@@ -29,9 +31,10 @@ Starts on **http://localhost:3000** (needs backend on :8080).
 
 ## ❌ Left for launch
 
-- [ ] Deploy to Vercel + `VITE_*` prod env vars (API URL, store URL, Google client ID)
+- [ ] Replace preview business/contact values with verified legal details
+- [ ] Configure private image delivery through `S3_PUBLIC_BASE_URL`
+- [ ] Real product catalog data: weight, dimensions, GST rate, HSN, photos
 - [ ] OG-meta edge function for rich link previews (reel links show generic preview until then)
-- [ ] Real product catalog + photos (via admin panel)
 
 ## ⚙️ Configuration
 

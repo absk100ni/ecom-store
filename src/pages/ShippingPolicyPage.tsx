@@ -19,7 +19,7 @@ export default function ShippingPolicyPage() {
 
       <article className="prose prose-gray max-w-none">
         <h1>Shipping Policy</h1>
-        <p className="text-sm text-gray-500">Last updated: July 2026</p>
+        <p className="text-sm text-gray-500">Last updated: November 2026</p>
 
         <h2>1. Processing Time</h2>
         <p>Orders are processed within 1–2 business days (Monday–Saturday, excluding public holidays). You will receive a confirmation SMS/email once your order is shipped.</p>
@@ -48,7 +48,7 @@ export default function ShippingPolicyPage() {
         <p>Once shipped, you can track your order from <strong>My Orders → Order Details</strong>. The AWB number and courier partner link will be available once the shipment is dispatched.</p>
 
         <h2>6. Undelivered Packages</h2>
-        <p>If delivery is attempted and you are unavailable, the courier will make up to 2 re-attempts. After that, the package may be returned to us. We will contact you to arrange re-dispatch (additional shipping charges may apply).</p>
+        <p>Delivery attempts and return-to-origin handling depend on the assigned courier. Contact support using the order number if tracking shows an unsuccessful delivery.</p>
 
         <h2>7. Contact</h2>
         <p>For shipping queries: <a href={`mailto:${BUSINESS.supportEmail}`}>{BUSINESS.supportEmail}</a> | {BUSINESS.supportPhone}</p>

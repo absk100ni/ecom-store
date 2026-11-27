@@ -33,9 +33,9 @@ import { initAnalytics, trackPageView } from './lib/analytics';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
-  if (typeof window !== 'undefined') {
+  useEffect(() => {
     window.scrollTo(0, 0);
-  }
+  }, [pathname]);
   return null;
 }
 

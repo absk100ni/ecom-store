@@ -63,12 +63,12 @@ export default function Header() {
 
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 shrink-0">
-              <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-md shadow-primary-500/20">
-                <Zap className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 bg-slate-950 border border-slate-700 rounded-md flex items-center justify-center">
+                <Zap className="w-5 h-5 text-amber-400" />
               </div>
               <div className="hidden sm:block">
-                <span className="font-extrabold text-xl text-gray-900 tracking-tight">Lucubra</span>
-                <span className="font-extrabold text-xl text-primary-600 tracking-tight">Elec</span>
+                <span className="font-extrabold text-xl text-slate-950 tracking-tight">Lucubra</span>
+                <span className="font-extrabold text-xl text-amber-600 tracking-tight">Elec</span>
               </div>
             </Link>
 
@@ -178,8 +178,8 @@ export default function Header() {
           <div className="fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-white z-50 lg:hidden overflow-y-auto animate-slide-in-left">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 bg-slate-950 border border-slate-700 rounded-md flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-amber-400" />
                 </div>
                 <span className="font-bold text-lg">LucubraElec</span>
               </div>

@@ -16,16 +16,15 @@ const SORT_OPTIONS = [
 
 const PRICE_RANGES = [
   { label: 'All Prices', min: 0, max: Infinity },
-  { label: 'Under ₹20,000', min: 0, max: 2000000 },
-  { label: '₹20,000 - ₹50,000', min: 2000000, max: 5000000 },
-  { label: '₹50,000 - ₹1,00,000', min: 5000000, max: 10000000 },
-  { label: 'Above ₹1,00,000', min: 10000000, max: Infinity },
+  { label: 'Under ₹500', min: 0, max: 50000 },
+  { label: '₹500 – ₹2,000', min: 50000, max: 200000 },
+  { label: '₹2,000 – ₹10,000', min: 200000, max: 1000000 },
+  { label: 'Above ₹10,000', min: 1000000, max: Infinity },
 ];
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<any[]>([]);
-  const [allProducts, setAllProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -49,45 +48,28 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setLoading(true);
-    api.getProducts({ search: search || undefined, category: category || undefined, page, limit })
+    const range = PRICE_RANGES[priceRange];
+    api.getProducts({
+      search: search || undefined,
+      category: category || undefined,
+      page,
+      limit,
+      sort: sortBy || undefined,
+      min_price: priceRange > 0 && Number.isFinite(range.min) ? range.min : undefined,
+      max_price: priceRange > 0 && Number.isFinite(range.max) ? range.max - 1 : undefined,
+    })
       .then((r) => {
-        const prods = r.data.products || [];
-        setAllProducts(prods);
+        setProducts(r.data.products || []);
         setTotalPages(r.data.total_pages || 1);
         setTotal(r.data.total || 0);
       })
-      .catch(() => {})
+      .catch(() => {
+        setProducts([]);
+        setTotal(0);
+        setTotalPages(1);
+      })
       .finally(() => setLoading(false));
-  }, [search, category, page]);
-
-  // Client-side sort and price filter
-  useEffect(() => {
-    let filtered = [...allProducts];
-
-    // Price filter
-    if (priceRange > 0) {
-      const range = PRICE_RANGES[priceRange];
-      filtered = filtered.filter((p) => p.price >= range.min && p.price < range.max);
-    }
-
-    // Sort
-    switch (sortBy) {
-      case 'price_asc':
-        filtered.sort((a, b) => a.price - b.price);
-        break;
-      case 'price_desc':
-        filtered.sort((a, b) => b.price - a.price);
-        break;
-      case 'newest':
-        filtered.reverse();
-        break;
-      case 'name_asc':
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-    }
-
-    setProducts(filtered);
-  }, [allProducts, sortBy, priceRange]);
+  }, [search, category, page, sortBy, priceRange]);
 
   const setCategory = (cat: string) => {
     const params = new URLSearchParams(searchParams);
@@ -115,7 +97,7 @@ export default function ProductsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      <Helmet><title>Products - LucubraElec</title><meta name="description" content="Browse electronics, smartphones, laptops and more" /></Helmet>
+      <Helmet><title>Products - LucubraElec</title><meta name="description" content="Browse electrical supplies, electronic components, lighting and practical hardware." /></Helmet>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <Link to="/" className="hover:text-primary-600 flex items-center gap-1">

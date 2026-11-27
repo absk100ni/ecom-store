@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { STORE_NAME, getShippingCost, FREE_SHIPPING_THRESHOLD } from '../config/constants';
 
 export default function CartPage() {
-  const { cart, cartTotal, isAuth, setCart, guestCart, guestCartTotal, updateGuestCartQty, removeFromGuestCart } = useStore();
+  const { cart, cartTotal, isAuth, setCart, guestCart, guestCartTotal, updateGuestCartQty, removeFromGuestCart, replaceGuestCart } = useStore();
   const navigate = useNavigate();
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
@@ -18,24 +18,50 @@ export default function CartPage() {
   // Active cart: server when authed, local when guest
   const activeCart = isAuth ? cart : guestCart;
   const activeTotal = isAuth ? cartTotal : guestCartTotal;
+  const hasUnavailableItems = activeCart.some((item) => item.available === false || (item.stock !== undefined && item.quantity > item.stock));
 
   useEffect(() => {
     if (isAuth) {
       api.getCart()
         .then((r) => setCart(r.data.cart?.items || [], r.data.total || 0))
-        .catch(() => {});
+        .catch(() => toast.error('Cart could not be refreshed'));
+      return;
     }
+
+    const stored = useStore.getState().guestCart;
+    if (stored.length === 0) return;
+    Promise.all(stored.map(async (item) => {
+      try {
+        const response = await api.getProduct(item.product_id);
+        const product = response.data;
+        const variant = item.variant_id ? (product.variants || []).find((option: any) => option.id === item.variant_id) : null;
+        if ((product.variants || []).length > 0 && !variant) return { ...item, stock: 0, available: false };
+        return {
+          ...item,
+          name: product.name,
+          price: variant?.price > 0 ? variant.price : product.price,
+          variant_label: variant ? `${variant.name}: ${variant.value}` : undefined,
+          image: product.thumbnail,
+          stock: variant ? Math.min(product.stock, variant.stock) : product.stock,
+          available: product.is_active !== false,
+        };
+      } catch {
+        return { ...item, stock: 0, available: false };
+      }
+    })).then((items) => {
+      replaceGuestCart(items);
+    });
   }, [isAuth]);
 
-  const updateQty = async (productId: string, newQty: number) => {
+  const updateQty = async (productId: string, newQty: number, variantId?: string) => {
     if (newQty < 1) return;
     if (!isAuth) {
-      updateGuestCartQty(productId, newQty);
+      updateGuestCartQty(productId, newQty, variantId);
       return;
     }
     setUpdatingId(productId);
     try {
-      await api.updateCartQty(productId, newQty);
+      await api.updateCartQty(productId, newQty, variantId);
       const c = await api.getCart();
       setCart(c.data.cart?.items || [], c.data.total || 0);
     } catch {
@@ -45,14 +71,14 @@ export default function CartPage() {
     }
   };
 
-  const removeItem = async (productId: string) => {
+  const removeItem = async (productId: string, variantId?: string) => {
     if (!isAuth) {
-      removeFromGuestCart(productId);
+      removeFromGuestCart(productId, variantId);
       toast.success('Item removed');
       return;
     }
     try {
-      await api.removeFromCart(productId);
+      await api.removeFromCart(productId, variantId);
       const c = await api.getCart();
       setCart(c.data.cart?.items || [], c.data.total || 0);
       toast.success('Item removed');
@@ -122,7 +148,7 @@ export default function CartPage() {
               </div>
             )}
             {activeCart.map((item) => (
-              <div key={item.product_id} className="card p-4 md:p-5">
+              <div key={`${item.product_id}:${item.variant_id || 'base'}`} className="card p-4 md:p-5">
                 <div className="flex gap-4">
                   {/* Image */}
                   <Link to={`/p/${item.product_id}`} className="shrink-0">
@@ -140,15 +166,17 @@ export default function CartPage() {
                     <Link to={`/p/${item.product_id}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 text-sm md:text-base">
                       {item.name}
                     </Link>
+                    {item.variant_label && <p className="text-xs text-slate-600 mt-0.5">Option: {item.variant_label}</p>}
                     <p className="text-sm text-gray-500 mt-0.5">
                       ₹{((item.price || 0) / 100).toLocaleString('en-IN')} per unit
                     </p>
+                    {item.available === false && <p className="text-xs font-semibold text-red-700 mt-1">No longer available</p>}
 
                     <div className="flex items-center justify-between mt-3">
                       {/* Quantity Controls */}
                       <div className="flex items-center border-2 border-gray-200 rounded-xl">
                         <button
-                          onClick={() => updateQty(item.product_id, item.quantity - 1)}
+                          onClick={() => updateQty(item.product_id, item.quantity - 1, item.variant_id)}
                           disabled={updatingId === item.product_id || item.quantity <= 1}
                           className="p-2 hover:bg-gray-50 rounded-l-lg transition-colors disabled:opacity-30"
                         >
@@ -158,7 +186,7 @@ export default function CartPage() {
                           {updatingId === item.product_id ? '...' : item.quantity}
                         </span>
                         <button
-                          onClick={() => updateQty(item.product_id, item.quantity + 1)}
+                          onClick={() => updateQty(item.product_id, item.quantity + 1, item.variant_id)}
                           disabled={updatingId === item.product_id || (item.stock !== undefined && item.quantity >= item.stock)}
                           title={item.stock !== undefined && item.quantity >= item.stock ? `Only ${item.stock} in stock` : undefined}
                           className="p-2 hover:bg-gray-50 rounded-r-lg transition-colors disabled:opacity-30"
@@ -176,7 +204,7 @@ export default function CartPage() {
                           ₹{((item.price * item.quantity) / 100).toLocaleString('en-IN')}
                         </span>
                         <button
-                          onClick={() => removeItem(item.product_id)}
+                          onClick={() => removeItem(item.product_id, item.variant_id)}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                           title="Remove item"
                         >
@@ -229,7 +257,6 @@ export default function CartPage() {
                     </button>
                   </div>
                 )}
-                <p className="text-[11px] text-gray-400 mt-1.5">Try: WELCOME10, FLAT500</p>
               </div>
 
               <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -262,8 +289,14 @@ export default function CartPage() {
                 <p className="text-[11px] text-gray-400 mt-0.5">Including all taxes</p>
               </div>
 
+              {hasUnavailableItems && (
+                <p className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg">
+                  Remove unavailable items or reduce their quantities before checkout.
+                </p>
+              )}
               <button
                 onClick={() => navigate('/checkout')}
+                disabled={hasUnavailableItems}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 Proceed to Checkout <ArrowRight className="w-4 h-4" />

@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
 
       <article className="prose prose-gray max-w-none">
         <h1>Privacy Policy</h1>
-        <p className="text-sm text-gray-500">Last updated: July 2026</p>
+        <p className="text-sm text-gray-500">Last updated: November 2026</p>
 
         <p><strong>{BUSINESS.legalName}</strong> ("{BUSINESS.legalName}", "we", "us") is committed to protecting your privacy. This policy explains what data we collect, how we use it, and your rights.</p>
 
@@ -27,17 +27,12 @@ export default function PrivacyPolicyPage() {
         <ul>
           <li><strong>Account information:</strong> Name, email address, phone number provided during registration or checkout.</li>
           <li><strong>Order information:</strong> Shipping address, order history, payment status.</li>
-          <li><strong>Payment data:</strong> Payments are processed securely via Stripe/Razorpay. We <strong>never</strong> store your card number, CVV, or full card details on our servers.</li>
+          <li><strong>Payment data:</strong> Payments are handled by an external payment gateway. We do not store card numbers, CVVs, or full payment credentials on our servers.</li>
           <li><strong>Usage data:</strong> Pages viewed, device type, browser, IP address — collected via cookies and analytics tools (see below).</li>
         </ul>
 
         <h2>2. Cookies & Analytics</h2>
-        <p>We use the following analytics services to improve our store:</p>
-        <ul>
-          <li><strong>Meta Pixel (Facebook):</strong> Tracks page views and purchase events for advertising measurement.</li>
-          <li><strong>Google Analytics 4 (GA4):</strong> Measures site traffic, user behaviour, and conversion events.</li>
-        </ul>
-        <p>You can manage cookie preferences via your browser settings. Disabling cookies may affect site functionality.</p>
+        <p>Essential browser storage is used for sign-in state, guest carts, and recent guest-order references. Optional advertising or analytics tools will be disclosed here before they are enabled.</p>
 
         <h2>3. How We Use Your Information</h2>
         <ul>
@@ -51,9 +46,8 @@ export default function PrivacyPolicyPage() {
         <h2>4. Data Sharing</h2>
         <p>We do not sell your personal data. We share information only with:</p>
         <ul>
-          <li>Payment processors (Stripe, Razorpay) for transaction processing.</li>
-          <li>Shipping partners for order delivery.</li>
-          <li>Analytics providers (Meta, Google) in anonymised/aggregated form.</li>
+          <li>Payment processors used for transaction processing.</li>
+          <li>Shipping partners used to deliver an order.</li>
           <li>Legal authorities when required by law.</li>
         </ul>
 
