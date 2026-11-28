@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { HelmetProvider } from 'react-helmet-async';
@@ -27,6 +27,7 @@ import RefundPolicyPage from './pages/RefundPolicyPage';
 import ShippingPolicyPage from './pages/ShippingPolicyPage';
 import ContactPage from './pages/ContactPage';
 import TrackOrderPage from './pages/TrackOrderPage';
+import * as api from './services/api';
 
 // Analytics
 import { initAnalytics, trackPageView } from './lib/analytics';
@@ -50,10 +51,22 @@ function AnalyticsPageTracker() {
 function AppLayout() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
+  const [maintenance, setMaintenance] = useState(false);
+
+  useEffect(() => {
+    const refresh = () => api.getFeatureFlags().then((response) => setMaintenance(response.data.flags?.website_maintenance === true)).catch(() => {});
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     initAnalytics();
   }, []);
+
+  if (maintenance) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6"><div className="max-w-lg text-center"><div className="text-amber-400 text-5xl mb-5">⚡</div><h1 className="text-3xl font-extrabold">LucubraElec is temporarily under maintenance</h1><p className="mt-4 text-slate-300">We are making improvements. Please check again shortly.</p></div></div>;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">

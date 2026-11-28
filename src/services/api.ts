@@ -26,6 +26,7 @@ api.interceptors.response.use(
 );
 
 // Runtime
+export const getFeatureFlags = () => api.get('/feature-flags');
 export const getCheckoutStatus = () => api.get('/checkout/status');
 
 // Auth
