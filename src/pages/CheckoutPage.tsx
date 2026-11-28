@@ -61,6 +61,7 @@ export default function CheckoutPage() {
 
   // P0-2: double-click guard
   const isSubmittingRef = useRef(false);
+  const idempotencyKeyRef = useRef(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
 
   // Fail closed when runtime checkout status cannot be confirmed.
   useEffect(() => {
@@ -245,7 +246,7 @@ export default function CheckoutPage() {
           shipping_address: addr,
           payment_plan: paymentPlan,
           ...(couponCode ? { coupon_code: couponCode } : {}),
-        });
+        }, idempotencyKeyRef.current);
         order = orderRes.data.order || orderRes.data;
         oid = order.id || order.ID;
         onum = order.order_number || order.OrderNumber;
@@ -284,7 +285,7 @@ export default function CheckoutPage() {
         }
       } else {
         // Authed order flow (unchanged)
-        const orderRes = await api.createOrder({ shipping_address: addr, payment_plan: paymentPlan, ...(couponCode ? { coupon_code: couponCode } : {}) });
+        const orderRes = await api.createOrder({ shipping_address: addr, payment_plan: paymentPlan, ...(couponCode ? { coupon_code: couponCode } : {}) }, idempotencyKeyRef.current);
         order = orderRes.data;
         oid = order.id || order.ID;
         onum = order.order_number || order.OrderNumber;

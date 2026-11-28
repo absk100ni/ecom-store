@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
     }
     setDeliveryInfo('Checking delivery availability...');
     try {
-      const response = await api.checkServiceability(pincode);
+      const response = await api.checkServiceability(pincode, { product_id: product.id, variant_id: selectedVariantId || undefined, quantity: qty });
       const result = response.data;
       if (!result.serviceable) {
         setDeliveryInfo('Delivery is not available for this pincode.');

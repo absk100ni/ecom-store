@@ -52,7 +52,7 @@ export const clearCart = () => api.delete('/cart');
 export const applyCoupon = (code: string, subtotal: number) => api.post('/coupons/validate', { code, subtotal });
 
 // Orders
-export const createOrder = (data: any) => api.post('/orders', data);
+export const createOrder = (data: any, idempotencyKey: string) => api.post('/orders', data, { headers: { 'Idempotency-Key': idempotencyKey } });
 export const abandonOrder = (id: string) => api.post(`/orders/${id}/abandon`);
 export const getOrders = () => api.get('/orders');
 export const getOrder = (id: string) => api.get(`/orders/${id}`);
@@ -64,7 +64,7 @@ export const createPayment = (orderId: string) => api.post('/payment/create', { 
 export const verifyPayment = (data: any) => api.post('/payment/verify', data);
 
 // Shipping
-export const checkServiceability = (pincode: string) => api.get(`/shipping/serviceability/${pincode}`);
+export const checkServiceability = (pincode: string, params?: { product_id?: string; variant_id?: string; quantity?: number }) => api.get(`/shipping/serviceability/${pincode}`, { params });
 export const trackShipment = (orderId: string) => api.get(`/shipping/track/${orderId}`);
 
 // User
@@ -102,7 +102,7 @@ export const getInvoiceHtml = (orderId: string) => api.get(`/orders/${orderId}/i
 export const submitContact = (data: any) => api.post('/contact', data);
 
 // Guest checkout
-export const guestCreateOrder = (data: any) => api.post('/guest/orders', data);
+export const guestCreateOrder = (data: any, idempotencyKey: string) => api.post('/guest/orders', data, { headers: { 'Idempotency-Key': idempotencyKey } });
 export const guestCreatePayment = (orderId: string, guestToken: string) => api.post('/guest/payment/create', { order_id: orderId, guest_token: guestToken });
 export const guestVerifyPayment = (data: any) => api.post('/guest/payment/verify', data);
 export const guestAbandonOrder = (orderId: string, guestToken: string) => api.post(`/guest/orders/${orderId}/abandon`, { guest_token: guestToken });
